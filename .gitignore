@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environnement et secrets
+.venv/
+.env
+
+# Outils de qualité et de test
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Corpus et données dérivées : protégés par le droit d'auteur, jamais versionnés
+data/
+*.pdf
+chroma/
+qdrant_storage/
