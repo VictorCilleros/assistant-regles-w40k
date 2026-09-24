@@ -7,11 +7,33 @@ authors = [
     { name = "VictorCilleros", email = "victor.cilleros.pro@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "anthropic>=1.8.0",
+    "docling>=2.130.0",
+    "docling-core>=2.98.0",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "pypdf>=6.19.0",
+    "python-dotenv>=1.2.3",
+    "pyyaml>=6.0.3",
+    "tqdm>=4.70.1",
+    "transformers>=5.17.0",
+]
 
 [project.scripts]
-assistant-regles = "assistant_regles:main"
+ingest-regles = "assistant_regles.ingest.pipeline:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "nbstripout>=0.9.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = ["--import-mode=importlib"]

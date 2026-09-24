@@ -1,0 +1,64 @@
+# Structure du livre de règles de base (d'après le sommaire).
+# - Les pages sont les numéros de page Docling (identiques aux pages imprimées pour ce livre).
+# - Les numéros de section sont des chaînes sur deux chiffres ENTRE GUILLEMETS
+#   (sans guillemets, YAML lirait 01 comme l'entier 1 et la validation échouerait).
+# - num: null pour les parties non numérotées (Appendices, Index).
+# - Les titres doivent suivre l'orthographe du livre pour être reconnus s'ils sont détectés.
+
+chapitres:
+  - titre: INTRODUCTION
+    page_debut: 4
+    page_fin: 5
+    sections:
+      - { num: "00", titre: "introduction", page_debut: 4 }
+
+  - titre: RÈGLES ÉLÉMENTAIRES
+    page_debut: 6
+    page_fin: 25
+    sections:
+      - { num: "01", titre: "Concepts de base", page_debut: 8 }
+      - { num: "02", titre: "Fiches techniques", page_debut: 10 }
+      - { num: "03", titre: "Mouvement", page_debut: 12 }
+      - { num: "04", titre: "Effectuer des attaques", page_debut: 16 }
+      - { num: "05", titre: "Séquence d'attaque", page_debut: 18 }
+      - { num: "06", titre: "Autres concepts", page_debut: 24 }
+
+  - titre: LE ROUND DE BATAILLE
+    page_debut: 26
+    page_fin: 43
+    sections:
+      - { num: "07", titre: "Le round de bataille", page_debut: 28 }
+      - { num: "08", titre: "Phase de commandement", page_debut: 30 }
+      - { num: "09", titre: "Phase de mouvement", page_debut: 32 }
+      - { num: "10", titre: "Phase de tir", page_debut: 34 }
+      - { num: "11", titre: "Phase de charge", page_debut: 36 }
+      - { num: "12", titre: "Phase de combat", page_debut: 38 }
+
+  - titre: CHAMPS DE BATAILLE ET TACTIQUES
+    page_debut: 44
+    page_fin: 59
+    sections:
+      - { num: "13", titre: "Terrain", page_debut: 46 }
+      - { num: "14", titre: "Objectif", page_debut: 52 }
+      - { num: "15", titre: "Stratagèmes", page_debut: 54 }
+      - { num: "16", titre: "Actions", page_debut: 58 }
+
+  - titre: RÈGLES AVANCÉES
+    page_debut: 60
+    page_fin: 75
+    sections:
+      - { num: "17", titre: "Monstres et véhicules", page_debut: 62 }
+      - { num: "18", titre: "Transport", page_debut: 64 }
+      - { num: "19", titre: "Unités attachées", page_debut: 66 }
+      - { num: "20", titre: "Réserves stratégiques", page_debut: 68 }
+      - { num: "21", titre: "Vol et élan", page_debut: 70 }
+      - { num: "22", titre: "Autres règles et aptitudes", page_debut: 72 }
+      - { num: "23", titre: "Aérodynes", page_debut: 74 }
+
+  - titre: RÉFÉRENCES
+    page_debut: 76
+    page_fin: 89
+    sections:
+      - { num: "24", titre: "Aptitudes de base", page_debut: 78 }
+      - { num: null, titre: "Appendices des règles", page_debut: 86 }
+      - { num: null, titre: "Index des règles de base", page_debut: 89 }

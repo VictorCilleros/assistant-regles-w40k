@@ -1,0 +1,32 @@
+# Paramètres d'exécution du pipeline d'ingestion.
+# Les chemins relatifs sont résolus depuis la racine du repo (dossier du pyproject.toml).
+# Tout le contenu de data/ est ignoré par git (livre sous copyright).
+
+chemins:
+  pdf: data/core-rules/fr-warhammer40k_regles_de_base_01_06_2026.pdf
+  cache_docling: data/interim/regles_docling.json   # conversion Docling mise en cache
+  elements: data/interim/elements.parquet            # éléments structurés + annotations (audit)
+  chunks: data/interim/chunks.jsonl                  # sortie : entrée de l'étape d'embedding
+
+document:
+  source: livre_regles_principal
+  edition: 11e
+
+docling:
+  ocr: false                # PDF natif : texte sélectionnable
+  structure_tableaux: true
+
+nettoyage:
+  # Sections exclues en bloc (comparaison exacte avec section_titre)
+  zones_hors_regles:
+    - "Index des règles de base"
+    - "(ouverture de chapitre)"
+    - "introduction"
+  longueur_max_etiquette: 25   # au-delà, un texte d'image n'est jamais une étiquette
+  longueur_max_renvoi: 50      # dans « VOIR AUSSI », au-delà c'est du vrai contenu
+  seuil_a_relire: 15           # signal de relecture, ne supprime rien
+
+chunking:
+  tokenizer: BAAI/bge-m3       # même tokenizer que le modèle d'embedding
+  cible_tokens: 400            # taille visée lors du regroupement de sous-parties
+  max_tokens: 600              # au-delà, une sous-section est découpée
