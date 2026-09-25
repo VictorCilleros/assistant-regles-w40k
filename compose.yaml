@@ -1,0 +1,27 @@
+# Services locaux du projet. Pour l'instant : la base vectorielle seule.
+# Le service applicatif (API) sera ajouté au jalon 4.
+name: assistant-regles
+
+services:
+  db:
+    # Version épinglée : pgvector 0.8.6 sur PostgreSQL 18 (Debian trixie)
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    environment:
+      # Variables lues dans .env ; compose échoue explicitement si l'une manque
+      POSTGRES_DB: ${PGDATABASE:?à définir dans .env}
+      POSTGRES_USER: ${PGUSER:?à définir dans .env}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?à définir dans .env}
+    ports:
+      # Exposé uniquement sur la boucle locale : Docker contourne ufw
+      - "127.0.0.1:${PGPORT:-5432}:5432"
+    volumes:
+      # PostgreSQL 18 : monter /var/lib/postgresql (et non plus .../data)
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

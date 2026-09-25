@@ -1,0 +1,1 @@
+"""Indexation et recherche : embeddings BGE-M3 et base vectorielle pgvector."""
