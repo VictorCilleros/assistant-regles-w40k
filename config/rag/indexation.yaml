@@ -1,0 +1,10 @@
+# Paramètres de l'indexation : chunks.jsonl -> embeddings -> base vectorielle.
+# Pour l'instant : le modèle d'embedding. La base (table, HNSW) viendra ensuite.
+
+embeddings:
+  modele: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181   # commit Hugging Face épinglé : vecteurs reproductibles
+  dimension: 1024      # vérifiée au chargement ; doit correspondre à vector(1024) dans chunks_w40k
+  device: auto         # auto | cpu | cuda (auto : GPU si disponible)
+  fp16: true           # ignoré sur CPU ; écart mesuré fp16/fp32 : cosinus min 0,9997
+  batch_size: 32       # 207 chunks en 0,6 s, pic VRAM 2,7 Go (RTX 5070 Ti)

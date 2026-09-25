@@ -4,7 +4,7 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE IF NOT EXISTS chunks_regles_de_base_w40k (
+CREATE TABLE IF NOT EXISTS chunks_w40k (
     -- Champs issus du modèle Chunk de l'ingestion
     id               uuid         PRIMARY KEY,   -- uuid5 calculé par l'ingestion
     texte            text         NOT NULL,      -- texte embarqué tel quel
@@ -33,6 +33,6 @@ CREATE TABLE IF NOT EXISTS chunks_regles_de_base_w40k (
 );
 
 -- Index HNSW en distance cosinus (opérateur <=>)
-CREATE INDEX IF NOT EXISTS chunks_regles_de_base_w40k_embedding_hnsw
-    ON chunks_regles_de_base_w40k USING hnsw (embedding vector_cosine_ops)
+CREATE INDEX IF NOT EXISTS chunks_w40k_embedding_hnsw
+    ON chunks_w40k USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
