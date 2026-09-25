@@ -21,9 +21,17 @@ from assistant_regles.ingest.chunk import (
     construire_chunks,
     ecrire_jsonl,
 )
-from assistant_regles.ingest.clean import annoter_nettoyage, contenu_conserve, rapport_nettoyage
+from assistant_regles.ingest.clean import (
+    annoter_nettoyage,
+    contenu_conserve,
+    rapport_nettoyage,
+)
 from assistant_regles.ingest.config import ConfigIngestion, charger_config
-from assistant_regles.ingest.parse import convertir_pdf, diagnostiquer_structure, extraire_elements
+from assistant_regles.ingest.parse import (
+    convertir_pdf,
+    diagnostiquer_structure,
+    extraire_elements,
+)
 
 logger = logging.getLogger(__name__)
 
