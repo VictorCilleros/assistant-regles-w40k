@@ -1,5 +1,6 @@
-# Paramètres de l'indexation : chunks.jsonl -> embeddings -> base vectorielle.
-# Pour l'instant : le modèle d'embedding. La base (table, HNSW) viendra ensuite.
+# Configuration de la partie RAG : un seul fichier pour l'indexation et la recherche.
+# La section `embeddings` est partagée : chunks et questions DOIVENT être encodés
+# par le même modèle, sinon leurs vecteurs ne sont pas comparables.
 
 embeddings:
   modele: BAAI/bge-m3
@@ -8,3 +9,6 @@ embeddings:
   device: auto         # auto | cpu | cuda (auto : GPU si disponible)
   fp16: true           # ignoré sur CPU ; écart mesuré fp16/fp32 : cosinus min 0,9997
   batch_size: 32       # 207 chunks en 0,6 s, pic VRAM 2,7 Go (RTX 5070 Ti)
+
+recherche:
+  k: 5                 # nombre de chunks renvoyés (valeur de départ de la spec, à ajuster via l'éval)

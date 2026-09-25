@@ -47,6 +47,15 @@ class Encodeur(Protocol):
         ...
 
 
+def identifiant_modele(params: ParamsEmbeddings) -> str:
+    """Nom et révision du modèle, tel que stocké avec chaque vecteur (« nom@révision »).
+
+    Calculable depuis la config seule, sans charger le modèle : la recherche
+    l'utilise pour vérifier la base avant le chargement.
+    """
+    return f"{params.modele}@{params.revision}"
+
+
 def resoudre_device(demande: str, cuda_disponible: bool) -> str:
     """Traduit le device demandé en device effectif.
 
@@ -134,7 +143,10 @@ class EncodeurBGEM3:
         fp16 = params.fp16 and device == "cuda"
         if params.fp16 and not fp16:
             logger.info("fp16 ignoré : il n'est utilisé que sur GPU")
-        logger.info("Chargement de %s (révision %s) sur %s, fp16=%s",params.modele, params.revision[:8], device, fp16,)
+        logger.info(
+            "Chargement de %s (révision %s) sur %s, fp16=%s",
+            params.modele, params.revision[:8], device, fp16,
+        )
         modele = SentenceTransformer(params.modele, revision=params.revision, device=device)
         if fp16:
             modele.half()
@@ -146,7 +158,7 @@ class EncodeurBGEM3:
 
     @property
     def identifiant(self) -> str:
-        return f"{self._params.modele}@{self._params.revision}"
+        return identifiant_modele(self._params)
 
     @property
     def longueur_max(self) -> int:

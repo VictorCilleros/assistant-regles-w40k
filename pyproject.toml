@@ -29,6 +29,7 @@ dependencies = [
 [project.scripts]
 ingest-regles = "assistant_regles.ingest.pipeline:main"
 indexer-regles = "assistant_regles.rag.pipeline:main"
+chercher-regles = "assistant_regles.rag.recherche:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
