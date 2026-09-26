@@ -22,6 +22,15 @@ def _config_valide() -> dict:
             "batch_size": 32,
         },
         "recherche": {"k": 5},
+        "generation": {
+            "modele": "claude-sonnet-5",
+            "max_tokens": 4096,
+            "effort": "medium",
+            "reflexion": True,
+            "granularite": "paragraphe",
+            "prompt_systeme": "systeme_vf.md",
+            "phrase_abstention": "Je ne trouve pas la réponse dans les extraits du livre de règles fournis.",
+        },
     }
 
 
@@ -36,6 +45,7 @@ def test_config_valide(tmp_path):
     assert config.embeddings.revision == REVISION_FACTICE
     assert config.embeddings.dimension == 1024
     assert config.recherche.k == 5
+    assert config.generation.granularite == "paragraphe"
 
 
 def test_valeurs_par_defaut(tmp_path):
@@ -45,6 +55,7 @@ def test_valeurs_par_defaut(tmp_path):
         "BAAI/bge-m3", "auto", True, 32,
     )
     assert config.recherche.k == 5  # section recherche absente : valeurs par défaut
+    assert (config.generation.effort, config.generation.granularite) == ("medium", "paragraphe")
 
 
 @pytest.mark.parametrize(
@@ -56,6 +67,11 @@ def test_valeurs_par_defaut(tmp_path):
         ("embeddings", "batch_size", 0),
         ("embeddings", "dimension", 0),
         ("recherche", "k", 0),
+        ("generation", "effort", "moyen"),
+        ("generation", "granularite", "phrase"),
+        ("generation", "max_tokens", 0),
+        ("generation", "prompt_systeme", "../systeme.md"),   # pas de chemin : un nom de fichier
+        ("generation", "prompt_systeme", "systeme.txt"),
     ],
 )
 def test_valeur_invalide_refusee(tmp_path, section, cle, valeur):
@@ -90,3 +106,4 @@ def test_config_du_repo_valide():
     config = charger_config()
     assert config.embeddings.dimension == 1024
     assert config.recherche.k >= 1
+    assert config.generation.max_tokens > 0

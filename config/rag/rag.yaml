@@ -12,3 +12,12 @@ embeddings:
 
 recherche:
   k: 5                 # nombre de chunks renvoyés (valeur de départ de la spec, à ajuster via l'éval)
+
+generation:
+  modele: claude-sonnet-5
+  max_tokens: 4096     # borne toute la sortie, réflexion comprise ; réponses observées ~1 500 tokens
+  effort: high       # low | medium | high | xhigh | max ; à partir de medium, on apporte les précisions utiles (notebook 06)
+  reflexion: true      # true : réflexion adaptative (défaut du modèle) ; false : désactivée
+  granularite: paragraphe   # chunk | paragraphe ; paragraphe : citations ciblées sur les cas particuliers
+  prompt_systeme: systeme_vf.md    # fichier dans src/assistant_regles/rag/prompts/
+  phrase_abstention: "Je ne trouve pas la réponse dans les extraits du livre de règles fournis."
