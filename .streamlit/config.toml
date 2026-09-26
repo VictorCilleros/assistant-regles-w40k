@@ -1,0 +1,22 @@
+# Thème Streamlit de l'interface (lu au lancement depuis la racine du repo).
+# Couleurs unies inspirées de Warhammer 40,000 : noir, or impérial, rouge sombre.
+# Les polices de Games Workshop sont propriétaires : on utilise deux polices
+# Google Fonts libres qui s'en approchent (format « Nom:URL, repli »).
+
+[theme]
+base = "dark"
+primaryColor = "#C9A227"              # or impérial : boutons, liens actifs, focus
+backgroundColor = "#0F0E0C"           # fond principal
+secondaryBackgroundColor = "#1C1915"  # barre latérale, bulles, champs
+textColor = "#E6DFCF"                 # texte (ivoire)
+linkColor = "#D4AF37"
+borderColor = "#3A3226"
+baseRadius = "0.6rem"
+font = "Roboto Condensed:https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;600&display=swap, sans-serif"
+headingFont = "Cinzel:https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap, serif"
+
+[client]
+toolbarMode = "minimal"   # masque le menu de développement
+
+[browser]
+gatherUsageStats = false

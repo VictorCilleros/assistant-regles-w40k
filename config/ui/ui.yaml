@@ -1,0 +1,14 @@
+# Apparence de l'interface. Les couleurs de base et les polices sont dans
+# .streamlit/config.toml (thème natif de Streamlit).
+
+apparence:
+  # Image de fond : chemin relatif à la racine du repo. Pour la changer,
+  # remplace le fichier ou modifie ce chemin. Absente : pas d'image de fond.
+  # JPG ou WebP d'environ 1920 px de large et moins de 1 Mo conseillés.
+  image_fond: config/ui/images/fond.jpg
+  # Visibilité de l'image, de 0 (invisible) à 1 (sans voile). Un voile de la
+  # couleur de fond est posé par-dessus pour garder le texte lisible.
+  opacite_image: 0.18
+  couleur_accent: "#8B1A1A"          # rouge sombre : filets et séparateurs
+  avatar_assistant: ":material/shield:"
+  avatar_utilisateur: ":material/person:"

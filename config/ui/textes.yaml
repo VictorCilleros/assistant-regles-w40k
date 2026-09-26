@@ -1,0 +1,48 @@
+# Tous les textes affichés par l'interface. Modifie-les librement :
+# la structure est validée au lancement (une clé mal orthographiée est signalée).
+
+application:
+  titre: "Assistant de règles"
+  icone: "⚔️"                      # icône de l'onglet du navigateur
+  sous_titre: >-
+    Posez vos questions sur les règles de base de Warhammer 40,000 (11e édition).
+    Chaque réponse s'appuie sur le livre de règles et cite les passages utilisés.
+
+navigation:
+  assistant: "Assistant"
+  modele: "Informations sur le modèle"
+  documents: "Documents de référence"
+
+chat:
+  accueil: >-
+    Bienvenue ! Je réponds uniquement à partir du livre de règles de base, et je
+    cite les passages utilisés sous chaque réponse. Si la réponse n'y figure pas,
+    je vous le dis.
+  placeholder: "Posez votre question de règles…"
+  recherche_en_cours: "Recherche dans le livre de règles…"
+  nouvelle_conversation: "Nouvelle conversation"
+  titre_sources: "Sources"
+  erreur: "Impossible de répondre pour le moment. Vérifiez que la base est démarrée (docker compose up -d)."
+  details_erreur: "Détails techniques"
+
+modele:
+  titre_configuration: "Configuration active"
+  intro_configuration: "Valeurs lues dans config/rag/rag.yaml au chargement de la page."
+
+documents:
+  titre: "Documents de référence"
+  introduction: >-
+    Les documents ci-dessous constituent le corpus de l'assistant. Il ne répond
+    qu'à partir de leur contenu, dans la version indiquée.
+  bouton_lien: "Site officiel"
+  libelle_chunks: "Passages indexés"
+  base_indisponible: "base indisponible"
+
+pied_de_page:
+  nom: "Ktorvax"
+  email: "victor.cilleros.pro@gmail.com"
+  github: "https://github.com/VictorCilleros/assistant-regles-w40k"        # ex. https://github.com/<ton-compte>/assistant-regles-w40k
+  linkedin: ""      # ex. https://www.linkedin.com/in/<ton-profil>
+  mention: >-
+    Projet de démonstration non officiel, non affilié à Games Workshop.
+    Warhammer 40,000 est une marque de Games Workshop Ltd.

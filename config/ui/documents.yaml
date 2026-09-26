@@ -1,0 +1,15 @@
+# Registre des documents du corpus, affiché dans la page « Documents de référence ».
+# `source` et `edition` doivent correspondre aux valeurs des chunks en base
+# (config/ingest/pipeline.yaml) : la page affiche alors le nombre de passages indexés.
+
+documents:
+  - nom: "Warhammer 40,000 — Règles de base"
+    source: livre_regles_principal
+    edition: 11e
+    version: "01/06/2026"
+    langue: Français
+    editeur: Games Workshop
+    lien: "https://www.warhammer-community.com/"   # à remplacer par la page exacte de téléchargement
+    description: >-
+      Livre de règles principal : phases de jeu, mouvement, tir, combat, moral,
+      stratagèmes et règles de référence.
