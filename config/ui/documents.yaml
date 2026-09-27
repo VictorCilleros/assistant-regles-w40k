@@ -9,7 +9,7 @@ documents:
     version: "01/06/2026"
     langue: Français
     editeur: Games Workshop
-    lien: "https://www.warhammer-community.com/"   # à remplacer par la page exacte de téléchargement
+    lien: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/"   # à remplacer par la page exacte de téléchargement
     description: >-
       Livre de règles principal : phases de jeu, mouvement, tir, combat, moral,
       stratagèmes et règles de référence.
