@@ -44,6 +44,11 @@ FROM {TABLE}
 ORDER BY embedding <=> %(q)s
 LIMIT %(k)s"""
 
+SQL_LIRE_REGLE = f"""SELECT {", ".join(COLONNES_RESULTAT)}
+FROM {TABLE}
+WHERE code = %s
+ORDER BY page_debut, partie"""
+
 
 @dataclass(frozen=True)
 class Resultat:
@@ -97,6 +102,20 @@ def verifier_base(conn: psycopg.Connection, identifiant_modele: str) -> None:
         )
 
 
+def lire_regle(conn: psycopg.Connection, code: str) -> list[Resultat]:
+    """Toutes les parties d'une règle, par code « XX.YY », dans l'ordre du livre.
+
+    Le score n'a pas de sens pour une lecture par code : il vaut NaN. Liste vide
+    si le code n'existe pas. Plusieurs chunks peuvent porter le même code
+    (règle découpée en parties, ou code en double comme 15.11).
+    """
+    from psycopg.rows import dict_row
+
+    with conn.cursor(row_factory=dict_row) as cur:
+        lignes = cur.execute(SQL_LIRE_REGLE, (code,)).fetchall()
+    return [Resultat(rang=i, score=float("nan"), **ligne) for i, ligne in enumerate(lignes, start=1)]
+
+
 class MoteurRecherche:
     """Recherche top-k sur la base, avec un encodeur vérifié compatible."""
 
@@ -125,6 +144,10 @@ class MoteurRecherche:
         with self._conn.cursor(row_factory=dict_row) as cur:
             lignes = cur.execute(SQL_RECHERCHE, {"q": vecteur, "k": k}).fetchall()
         return [Resultat(rang=i, **ligne) for i, ligne in enumerate(lignes, start=1)]
+
+    def lire_regle(self, code: str) -> list[Resultat]:
+        """Toutes les parties d'une règle par son code (voir :func:`lire_regle`)."""
+        return lire_regle(self._conn, code)
 
 
 # --------------------------------------------------------------------------- #

@@ -4,7 +4,8 @@ Un fichier YAML unique dans ``config/rag/`` :
 
 - ``rag.yaml`` : section ``embeddings`` (modèle d'embedding, partagé par
   l'indexation et la recherche), section ``recherche`` (paramètres du top-k)
-  et section ``generation`` (appel à Claude et prompt système).
+  section ``generation`` (appel à Claude et prompt système) et section ``agent``
+  (agent de recherche qui choisit les passages avant la génération).
 
 Un seul fichier pour les deux usages garantit que chunks et questions sont
 encodés par le même modèle.
@@ -65,6 +66,22 @@ class ParamsGeneration(BaseModel):
     )
 
 
+class ParamsAgent(BaseModel):
+    """Paramètres de l'agent de recherche (modèle, budget, prompt)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actif: bool = True
+    modele: str = "claude-sonnet-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "high"  # None : non envoyé
+    max_tokens: int = Field(default=16_000, gt=0)
+    max_tours: int = Field(default=6, ge=2)  # au moins un tour de recherche et un pour conclure
+    max_passages: int = Field(default=8, gt=0)
+    k: int = Field(default=5, gt=0)
+    amorce: bool = True
+    prompt: str = Field(default="agent_vf.md", pattern=r"^[\w.-]+\.md$")
+
+
 class ConfigRag(BaseModel):
     """Contenu de rag.yaml."""
 
@@ -73,6 +90,7 @@ class ConfigRag(BaseModel):
     embeddings: ParamsEmbeddings
     recherche: ParamsRecherche = Field(default_factory=ParamsRecherche)
     generation: ParamsGeneration = Field(default_factory=ParamsGeneration)
+    agent: ParamsAgent = Field(default_factory=ParamsAgent)
 
 
 def _lire_yaml(chemin: Path) -> dict:

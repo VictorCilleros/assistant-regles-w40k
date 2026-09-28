@@ -4,6 +4,7 @@ from assistant_regles.rag.config import charger_config
 from assistant_regles.rag.generation import PromptSysteme
 from assistant_regles.ui.rendu import (
     echapper_markdown,
+    legende_agent,
     legende_technique,
     markdown_question,
     markdown_reponse,
@@ -42,3 +43,16 @@ def test_tableau_configuration():
     lignes = dict(tableau_configuration(charger_config(), PromptSysteme("p.md", "x", "c" * 64)))
     assert lignes["Prompt système"].endswith("[cccccccc]")
     assert lignes["Granularité des citations"] == "paragraphe"
+
+
+def test_legende_agent(selection_factice):
+    legende = legende_agent(selection_factice)
+    assert legende == ("agent claude-sonnet-5 · 2 tour(s) · 1 recherche(s) · 1/2 passages retenus · "
+                       "3000 → 200 tokens · 4.2 s")
+
+
+def test_tableau_configuration_agent():
+    prompt = PromptSysteme("agent_vf.md", "x", "d" * 64)
+    lignes = dict(tableau_configuration(charger_config(), None, prompt))
+    assert lignes["Modèle de l'agent"] == "claude-sonnet-5 (effort high)"
+    assert lignes["Prompt de l'agent"] == "agent_vf.md [dddddddd]"

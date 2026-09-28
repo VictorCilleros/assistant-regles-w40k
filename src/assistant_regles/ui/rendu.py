@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from assistant_regles.ui.style import MARQUEUR_UTILISATEUR
 
 if TYPE_CHECKING:
+    from assistant_regles.rag.agent import Selection
     from assistant_regles.rag.config import ConfigRag
     from assistant_regles.rag.generation import PromptSysteme, Reponse
 
@@ -55,20 +56,40 @@ def legende_technique(reponse: Reponse) -> str:
     )
 
 
+def legende_agent(selection: Selection) -> str:
+    """Ligne discrète sur la recherche de l'agent."""
+    repli = f" · fin par repli ({selection.fin})" if selection.fin != "retenue" else ""
+    return (
+        f"agent {selection.modele} · {selection.tours} tour(s) · {selection.nb_appels_outils} recherche(s) · "
+        f"{len(selection.passages)}/{selection.vus} passages retenus · "
+        f"{selection.tokens_entree} → {selection.tokens_sortie} tokens · {selection.duree:.1f} s{repli}"
+    )
+
+
 def markdown_question(question: str) -> str:
     """Question de l'utilisateur, marquée pour le style « bulle », HTML échappé."""
     return MARQUEUR_UTILISATEUR + echapper_markdown(html.escape(question))
 
 
-def tableau_configuration(config: ConfigRag, prompt: PromptSysteme | None) -> list[tuple[str, str]]:
+def tableau_configuration(
+    config: ConfigRag, prompt: PromptSysteme | None, prompt_agent: PromptSysteme | None = None
+) -> list[tuple[str, str]]:
     """Paramètres affichés dans la page « Informations sur le modèle »."""
-    e, r, g = config.embeddings, config.recherche, config.generation
+    e, r, g, a = config.embeddings, config.recherche, config.generation, config.agent
+    agent = [
+        ("Agent de recherche", f"{'activé' if a.actif else 'désactivé'} par défaut"),
+        ("Modèle de l'agent", f"{a.modele} (effort {a.effort or 'par défaut'})"),
+        ("Budget de l'agent", f"{a.max_tours} tours, {a.max_passages} passages retenus au plus, "
+                              f"{a.k} passages par recherche, amorce {'activée' if a.amorce else 'désactivée'}"),
+        ("Prompt de l'agent", f"{a.prompt} [{prompt_agent.empreinte[:8]}]" if prompt_agent else a.prompt),
+    ]
     return [
         ("Modèle d'embedding", f"{e.modele} (révision {e.revision[:8]}, dimension {e.dimension})"),
-        ("Passages transmis par question (k)", str(r.k)),
+        ("Passages transmis par question sans agent (k)", str(r.k)),
         ("Modèle de génération", g.modele),
         ("Effort", g.effort),
         ("Réflexion", "adaptative" if g.reflexion else "désactivée"),
         ("Granularité des citations", g.granularite),
         ("Prompt système", f"{g.prompt_systeme} [{prompt.empreinte[:8]}]" if prompt else g.prompt_systeme),
+        *agent,
     ]

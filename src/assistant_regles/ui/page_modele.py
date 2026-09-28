@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import streamlit as st
 
+from assistant_regles.rag.agent import charger_prompt_agent
 from assistant_regles.rag.config import charger_config as charger_config_rag
 from assistant_regles.rag.generation import charger_prompt
 from assistant_regles.ui.rendu import tableau_configuration
@@ -28,6 +29,11 @@ def afficher(config: ConfigUi) -> None:
     except (FileNotFoundError, ValueError) as e:
         prompt = None
         st.warning(str(e))
+    try:
+        prompt_agent = charger_prompt_agent(config_rag.agent)
+    except FileNotFoundError as e:
+        prompt_agent = None
+        st.warning(str(e))
     lignes = ["| Paramètre | Valeur |", "|---|---|"]
-    lignes += [f"| {nom} | {valeur} |" for nom, valeur in tableau_configuration(config_rag, prompt)]
+    lignes += [f"| {nom} | {valeur} |" for nom, valeur in tableau_configuration(config_rag, prompt, prompt_agent)]
     st.markdown("\n".join(lignes))

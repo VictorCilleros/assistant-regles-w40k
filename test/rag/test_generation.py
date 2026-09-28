@@ -255,3 +255,11 @@ def test_flux_diffuse_le_texte_puis_fournit_la_reponse(prompt, params):
 def test_flux_valide_les_entrees_immediatement(prompt, params):
     with pytest.raises(ValueError, match="vide"):
         Generateur(FauxClient(_message([])), params, prompt).generer_en_flux("  ", [_resultat()])
+
+
+def test_abstention_sans_appel(prompt, params):
+    client = FauxClient(_message([]))
+    reponse = Generateur(client, params, prompt).abstention("Recette de crêpes ?")
+    assert client.appels == []
+    assert reponse.abstention and reponse.texte == PHRASE
+    assert (reponse.stop_reason, reponse.tokens_entree, reponse.citations) == ("sans_passage", 0, [])

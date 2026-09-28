@@ -140,3 +140,20 @@ def test_question_vide_refusee_sans_encodage(conn, encodeur_factice, base_rempli
     with pytest.raises(ValueError, match="vide"):
         moteur.rechercher("  ", k=5)
     assert encodeur_factice.appels == 1  # seul l'encodage de base_remplie
+
+
+@pytest.mark.integration
+def test_lire_regle_par_code(conn, encodeur_factice, fabrique_chunk):
+    """Toutes les parties d'un code, dans l'ordre ; code inconnu : liste vide."""
+    parties = [
+        fabrique_chunk(id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"lecture|{i}")), code="07.02", partie=i,
+                       nb_parties=2, page_debut=20, page_fin=20, texte=f"Partie {i}.", ordres=[i])
+        for i in (2, 1)
+    ]
+    vecteurs = encodeur_factice.encoder([c.texte for c in parties])
+    synchroniser(conn, [vers_ligne(c, v, encodeur_factice.identifiant) for c, v in zip(parties, vecteurs)])
+    moteur = MoteurRecherche(encodeur_factice, conn)
+    lus = moteur.lire_regle("07.02")
+    assert [r.texte for r in lus] == ["Partie 1.", "Partie 2."]
+    assert [r.rang for r in lus] == [1, 2]
+    assert moteur.lire_regle("99.99") == []

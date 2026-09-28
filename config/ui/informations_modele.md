@@ -17,9 +17,18 @@ Chaque passage est transformé en **vecteur** (1 024 nombres) par le modèle
 la même façon, et les passages dont le vecteur est le plus proche (similarité
 cosinus) sont retrouvés dans une base **PostgreSQL + pgvector**.
 
-### 3. Rédaction de la réponse
+### 3. Agent de recherche (mode agent)
 
-Les passages retrouvés sont transmis à **Claude Sonnet 5** (Anthropic) avec des
+Les joueurs n'emploient pas toujours le vocabulaire du livre, et une règle
+générale a souvent ses exceptions ailleurs. En mode agent, un premier modèle
+(**Claude Sonnet 5**) reformule la question avec les termes du livre, lance
+plusieurs recherches, suit les renvois entre règles, puis **sélectionne** les
+passages utiles. Ses étapes s'affichent pendant la recherche. Le mode agent se
+désactive dans la barre latérale.
+
+### 4. Rédaction de la réponse
+
+Les passages retenus sont transmis à **Claude Sonnet 5** (Anthropic) avec des
 consignes strictes : répondre uniquement à partir des extraits, signaler ce qui
 n'est pas couvert, et dire clairement quand la réponse n'est pas dans le livre.
 Les **citations** sont fournies nativement par l'API : chaque passage cité est
@@ -31,5 +40,7 @@ un extrait réellement transmis, affiché sous la réponse.
   des questions précédentes.
 - La recherche est purement sémantique (pas encore de recherche hybride ni de
   reclassement des résultats).
+- Le mode agent est plus lent et plus coûteux : il fait plusieurs appels au
+  modèle avant de répondre.
 - Seul le livre de règles de base est indexé : les codex d'armée ne sont pas
   couverts.

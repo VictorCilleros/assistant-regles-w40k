@@ -46,9 +46,17 @@ def test_image_relative_a_la_racine(dossier_copie):
         ("ui.yaml", lambda c: c["apparence"].update(couleur_accent="rouge")),
         ("documents.yaml", lambda c: c["documents"][0].update(lien="www.sans-protocole.com")),
         ("textes.yaml", lambda c: c["pied_de_page"].update(github="github.com/sans-protocole")),
+        ("textes.yaml", lambda c: c["chat"].update(recherche_terminee="{passages} en {minutes} min")),
     ],
 )
 def test_configuration_invalide_refusee(dossier_copie, fichier, modification):
     _modifier(dossier_copie, fichier, modification)
     with pytest.raises(ValidationError):
         charger_config_ui(dossier_copie)
+
+
+def test_anciens_textes_sans_cles_agent_acceptes(dossier_copie):
+    """Un textes.yaml antérieur au mode agent reste valide (valeurs par défaut)."""
+    cles = ("mode_agent", "aide_mode_agent", "recherche_agent", "recherche_terminee")
+    _modifier(dossier_copie, "textes.yaml", lambda c: [c["chat"].pop(k) for k in cles])
+    assert charger_config_ui(dossier_copie).textes.chat.mode_agent == "Mode agent"

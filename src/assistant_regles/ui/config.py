@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from assistant_regles.ingest.config import trouver_racine
 
@@ -69,6 +69,24 @@ class TextesChat(_Strict):
     titre_sources: str
     erreur: str
     details_erreur: str
+    # Mode agent (valeurs par défaut : un textes.yaml antérieur reste valide)
+    mode_agent: str = "Mode agent"
+    aide_mode_agent: str = (
+        "L'agent reformule la question et lance plusieurs recherches avant de répondre. "
+        "Plus lent, souvent plus précis."
+    )
+    recherche_agent: str = "L'agent cherche dans le livre de règles…"
+    recherche_terminee: str = "Recherche terminée : {passages} passage(s) retenu(s) en {tours} tour(s)"
+
+    @field_validator("recherche_terminee")
+    @classmethod
+    def verifier_marqueurs(cls, texte: str) -> str:
+        """Seuls {passages} et {tours} sont disponibles dans ce texte."""
+        try:
+            texte.format(passages=0, tours=0)
+        except (KeyError, IndexError, ValueError) as e:
+            raise ValueError(f"marqueur invalide dans recherche_terminee ({e}) : utiliser {{passages}} et {{tours}}")
+        return texte
 
 
 class TextesModele(_Strict):

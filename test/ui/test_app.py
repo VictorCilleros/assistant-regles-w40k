@@ -25,14 +25,43 @@ def test_page_assistant_accueil(app):
     assert len(app.chat_message) == 1  # message d'accueil
 
 
-def test_question_reponse_citee(app):
+def test_mode_agent_par_defaut(app, ressources_factices):
+    """rag.yaml : agent.actif = true -> interrupteur activé, recherche par l'agent."""
+    assert app.toggle(key="mode_agent").value is True
     app.chat_input[0].set_value("Les pistolets peuvent-ils tirer ?").run()
-    assert not app.exception
-    assert not app.error
+    assert not app.exception and not app.error
+    assert ressources_factices.questions == ["Les pistolets peuvent-ils tirer ?"]
     textes = [m.value for m in app.markdown]
+    assert any("Recherche « PISTOLET CORPS À CORPS »" in t for t in textes), "étapes de l'agent absentes"
     assert any("<sup>[1]</sup>" in t for t in textes), "réponse finale avec notes absente"
     assert any("24.20 PISTOLET" in t for t in textes), "sources absentes"
-    assert len(app.session_state.historique) == 2
+    assert any(c.value.startswith("agent claude-sonnet-5") for c in app.caption), "légende de l'agent absente"
+    assert app.session_state.historique[1]["contenu"]["selection"] is not None
+
+
+def test_sans_agent(app, ressources_factices):
+    app.toggle(key="mode_agent").set_value(False).run()
+    app.chat_input[0].set_value("Les pistolets peuvent-ils tirer ?").run()
+    assert not app.exception and not app.error
+    assert ressources_factices.questions == []                     # l'agent n'est pas appelé
+    assert app.session_state.historique[1]["contenu"]["selection"] is None
+    assert any("<sup>[1]</sup>" in m.value for m in app.markdown)
+
+
+def test_agent_sans_passage_abstention_directe(app, ressources_factices):
+    ressources_factices.passages = []
+    app.chat_input[0].set_value("Recette des crêpes ?").run()
+    assert not app.exception
+    reponse = app.session_state.historique[1]["contenu"]["reponse"]
+    assert reponse.abstention and reponse.stop_reason == "sans_passage"
+
+
+def test_historique_reaffiche_la_trace(app):
+    app.chat_input[0].set_value("Première question ?").run()
+    app.run()   # réexécution : la réponse vient de l'historique
+    assert not app.exception
+    # AppTest classe un expander avec icône parmi les « status »
+    assert any("passage(s) retenu(s)" in e.label for e in app.get("status")), "trace absente de l'historique"
 
 
 def test_nouvelle_conversation(app):
@@ -48,6 +77,7 @@ def test_erreur_affichee_sans_casser_la_page(app, monkeypatch):
         raise RuntimeError("base éteinte")
 
     monkeypatch.setattr(ressources, "moteur_recherche", en_panne)
+    monkeypatch.setattr(ressources, "agent", lambda config_rag: en_panne())   # les deux modes
     app.chat_input[0].set_value("Question ?").run()
     assert not app.exception
     assert app.error and "Impossible de répondre" in app.error[0].value
@@ -75,6 +105,7 @@ def test_page_modele(ressources_factices):
     assert page.title[0].value == "Informations sur le modèle"
     tableau = next(m.value for m in page.markdown if m.value.startswith("| Paramètre"))
     assert "claude-sonnet-5" in tableau and "systeme_vf.md [" in tableau
+    assert "agent_vf.md [" in tableau and "Budget de l'agent" in tableau
 
 
 def test_page_documents(ressources_factices):

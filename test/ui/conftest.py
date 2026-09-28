@@ -5,6 +5,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
+from assistant_regles.rag.agent import AppelOutil, Selection
 from assistant_regles.rag.config import ParamsGeneration
 from assistant_regles.rag.generation import Generateur, PromptSysteme
 from assistant_regles.rag.recherche import Resultat
@@ -59,6 +60,31 @@ class FauxMoteur:
         return [fabriquer_resultat(i) for i in range(k)]
 
 
+class FauxAgent:
+    """Imite AgentRecherche : notifie ses étapes puis renvoie une sélection préparée."""
+
+    def __init__(self, passages):
+        self.passages = passages
+        self.questions = []
+
+    def chercher(self, question, au_fil=None):
+        self.questions.append(question)
+        etapes = (AppelOutil("amorce", question, ("24.20",)),
+                  AppelOutil("rechercher_regles", "PISTOLET CORPS À CORPS", ("24.20", "24.21")),
+                  AppelOutil("retenir_passages", "P1", tuple(r.code for r in self.passages)))
+        for etape in etapes:
+            if au_fil:
+                au_fil(etape)
+        return Selection(passages=tuple(self.passages), justification="ok", fin="retenue", appels=etapes,
+                         vus=2, tours=2, tokens_entree=3000, tokens_sortie=200, duree=4.2, modele="claude-sonnet-5")
+
+
+@pytest.fixture
+def selection_factice():
+    """Sélection d'agent : 1 passage retenu sur 2 vus, 2 tours, 1 recherche."""
+    return FauxAgent([fabriquer_resultat(0)]).chercher("Q ?")
+
+
 @pytest.fixture
 def reponse_factice():
     prompt = PromptSysteme("systeme_test.md", f"… {PHRASE}", "b" * 64)
@@ -75,3 +101,6 @@ def ressources_factices(monkeypatch):
     monkeypatch.setattr(ressources, "generateur",
                         lambda config_rag: Generateur(FauxClient(), config_rag.generation, prompt))
     monkeypatch.setattr(ressources, "compter_chunks", lambda: {("livre_regles_principal", "11e"): 207})
+    agent = FauxAgent([fabriquer_resultat(0)])
+    monkeypatch.setattr(ressources, "agent", lambda config_rag: agent)
+    return agent

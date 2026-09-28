@@ -5,8 +5,9 @@ connexion, client API) d'une question à l'autre et d'une page à l'autre. Sans
 ce cache, Streamlit réexécutant le script à chaque interaction, BGE-M3 serait
 rechargé à chaque question.
 
-Le prompt système n'est **pas** mis en cache : il est relu à chaque question,
-pour que les modifications de ``systeme_vf.md`` s'appliquent sans redémarrer.
+Les prompts (générateur et agent) ne sont **pas** mis en cache : ils sont relus
+à chaque question, pour que les modifications de ``systeme_vf.md`` et de
+``agent_vf.md`` s'appliquent sans redémarrer.
 
 Limite assumée (usage local, un seul utilisateur) : une seule connexion
 PostgreSQL est partagée. Pour plusieurs utilisateurs simultanés, il faudrait un
@@ -26,6 +27,7 @@ from assistant_regles.ui.style import image_en_data_uri
 if TYPE_CHECKING:
     import psycopg
 
+    from assistant_regles.rag.agent import AgentRecherche
     from assistant_regles.rag.config import ConfigRag
     from assistant_regles.rag.generation import Generateur
     from assistant_regles.rag.recherche import MoteurRecherche
@@ -65,6 +67,14 @@ def generateur(config_rag: ConfigRag) -> Generateur:
 
     g = config_rag.generation
     return Generateur(client_anthropic(), g, charger_prompt(g.prompt_systeme, g.phrase_abstention))
+
+
+def agent(config_rag: ConfigRag) -> AgentRecherche:
+    """Agent de recherche, avec son prompt relu à chaque appel (pas de cache)."""
+    from assistant_regles.rag.agent import AgentRecherche, charger_prompt_agent
+
+    return AgentRecherche(client_anthropic(), moteur_recherche(), config_rag.agent,
+                          charger_prompt_agent(config_rag.agent))
 
 
 def compter_chunks() -> dict[tuple[str, str], int]:

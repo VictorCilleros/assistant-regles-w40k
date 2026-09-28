@@ -31,6 +31,10 @@ def _config_valide() -> dict:
             "prompt_systeme": "systeme_vf.md",
             "phrase_abstention": "Je ne trouve pas la réponse dans les extraits du livre de règles fournis.",
         },
+        "agent": {
+            "actif": True, "modele": "claude-sonnet-5", "effort": "high", "max_tokens": 16000,
+            "max_tours": 6, "max_passages": 8, "k": 5, "amorce": True, "prompt": "agent_vf.md",
+        },
     }
 
 
@@ -72,6 +76,10 @@ def test_valeurs_par_defaut(tmp_path):
         ("generation", "max_tokens", 0),
         ("generation", "prompt_systeme", "../systeme.md"),   # pas de chemin : un nom de fichier
         ("generation", "prompt_systeme", "systeme.txt"),
+        ("agent", "effort", "fort"),
+        ("agent", "max_tours", 1),        # au moins un tour de recherche et un pour conclure
+        ("agent", "max_passages", 0),
+        ("agent", "prompt", "../agent.md"),
     ],
 )
 def test_valeur_invalide_refusee(tmp_path, section, cle, valeur):
@@ -107,3 +115,9 @@ def test_config_du_repo_valide():
     assert config.embeddings.dimension == 1024
     assert config.recherche.k >= 1
     assert config.generation.max_tokens > 0
+
+
+def test_agent_effort_optionnel(tmp_path):
+    contenu = _config_valide()
+    contenu["agent"]["effort"] = None   # paramètre non envoyé (modèles qui ne l'acceptent pas)
+    assert charger_config(_ecrire(tmp_path, contenu)).agent.effort is None

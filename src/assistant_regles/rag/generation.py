@@ -71,12 +71,16 @@ def verifier_prompt(texte: str, phrase_abstention: str) -> None:
         )
 
 
-def charger_prompt(nom: str, phrase_abstention: str) -> PromptSysteme:
-    """Lit un prompt système depuis ``rag/prompts/`` et le vérifie.
+def empreinte_texte(texte: str) -> str:
+    """Empreinte sha256 (hexadécimale) d'un texte de prompt."""
+    return hashlib.sha256(texte.encode("utf-8")).hexdigest()
+
+
+def lire_prompt(nom: str) -> PromptSysteme:
+    """Lit un fichier de prompt dans ``rag/prompts/`` (générateur ou agent).
 
     Raises:
         FileNotFoundError: fichier absent (le message liste les prompts disponibles).
-        ValueError: phrase d'abstention absente du prompt.
     """
     dossier = resources.files("assistant_regles.rag").joinpath(DOSSIER_PROMPTS)
     fichier = dossier.joinpath(nom)
@@ -84,8 +88,19 @@ def charger_prompt(nom: str, phrase_abstention: str) -> PromptSysteme:
         disponibles = sorted(f.name for f in dossier.iterdir() if f.name.endswith(".md"))
         raise FileNotFoundError(f"Prompt « {nom} » introuvable ; disponibles : {disponibles}")
     texte = fichier.read_text(encoding="utf-8")
-    verifier_prompt(texte, phrase_abstention)
-    return PromptSysteme(nom, texte, hashlib.sha256(texte.encode("utf-8")).hexdigest())
+    return PromptSysteme(nom, texte, empreinte_texte(texte))
+
+
+def charger_prompt(nom: str, phrase_abstention: str) -> PromptSysteme:
+    """Lit le prompt système du générateur et vérifie la phrase d'abstention.
+
+    Raises:
+        FileNotFoundError: fichier absent (le message liste les prompts disponibles).
+        ValueError: phrase d'abstention absente du prompt.
+    """
+    prompt = lire_prompt(nom)
+    verifier_prompt(prompt.texte, phrase_abstention)
+    return prompt
 
 
 # --------------------------------------------------------------------------- #
@@ -313,6 +328,26 @@ class Generateur:
         if not resultats:
             raise ValueError("Aucun chunk fourni : la recherche n'a rien renvoyé")
 
+    def abstention(self, question: str) -> Reponse:
+        """Réponse d'abstention, sans appel à l'API.
+
+        Utilisée quand l'agent de recherche n'a retenu aucun passage : il n'y a
+        rien à transmettre au modèle, la phrase d'abstention est renvoyée telle quelle.
+        """
+        return Reponse(
+            question=question,
+            segments=(Segment(self._params.phrase_abstention, ()),),
+            resultats=(),
+            abstention=True,
+            stop_reason="sans_passage",
+            modele=self._params.modele,
+            prompt=self._prompt.nom,
+            empreinte_prompt=self._prompt.empreinte,
+            tokens_entree=0,
+            tokens_sortie=0,
+            duree=0.0,
+        )
+
     def generer_en_flux(self, question: str, resultats: Sequence[Resultat]) -> FluxReponse:
         """Prépare une réponse en streaming (l'appel part à la première itération).
 
@@ -376,14 +411,18 @@ def formater_reponse(reponse: Reponse, largeur_extrait: int = 160) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Point d'entrée de ``uv run repondre-regles`` : recherche puis génération.
+    """Point d'entrée de ``uv run repondre-regles`` : recherche (agent ou top-k) puis génération.
+
+    ``--agent`` / ``--sans-agent`` remplacent le réglage ``agent.actif`` de la config.
 
     Returns:
         Code de sortie : 0 si une réponse a été produite, 1 sinon.
     """
     parser = argparse.ArgumentParser(description="Répond à une question de règles, avec citations.")
     parser.add_argument("question", help="question en langage naturel (entre guillemets)")
-    parser.add_argument("-k", type=int, default=None, help="nombre de chunks transmis (défaut : config)")
+    parser.add_argument("-k", type=int, default=None, help="nombre de chunks transmis sans agent (défaut : config)")
+    parser.add_argument("--agent", action=argparse.BooleanOptionalAction, default=None,
+                        help="utiliser l'agent de recherche (défaut : config)")
     parser.add_argument("-v", "--verbeux", action="store_true", help="journalisation INFO")
     args = parser.parse_args(argv)
 
@@ -402,20 +441,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     from assistant_regles.ingest.config import trouver_racine
     from assistant_regles.rag.config import charger_config
     from assistant_regles.rag.embeddings import EncodeurBGEM3, identifiant_modele
-    from assistant_regles.rag.recherche import (
-        MoteurRecherche,
-        valider_requete,
-        verifier_base,
-    )
+    from assistant_regles.rag.recherche import MoteurRecherche, valider_requete, verifier_base
 
     load_dotenv(trouver_racine() / ".env")
     config = charger_config()
     k = args.k if args.k is not None else config.recherche.k
+    avec_agent = config.agent.actif if args.agent is None else args.agent
 
     # Tout ce qui peut échouer vite est vérifié avant de charger le modèle d'embedding
     try:
         valider_requete(args.question, k)
         prompt = charger_prompt(config.generation.prompt_systeme, config.generation.phrase_abstention)
+        if avec_agent:
+            from assistant_regles.rag.agent import charger_prompt_agent
+
+            prompt_agent = charger_prompt_agent(config.agent)
         # Le client ne vérifie la clé qu'au premier appel : on le fait ici, avant le modèle
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise ValueError("ANTHROPIC_API_KEY absente : la renseigner dans le .env")
@@ -434,12 +474,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             verifier_base(conn, identifiant_modele(config.embeddings))
             moteur = MoteurRecherche(EncodeurBGEM3.charger(config.embeddings), conn)
-            resultats = moteur.rechercher(args.question, k)
-            reponse = Generateur(client, config.generation, prompt).generer(args.question, resultats)
+            generateur = Generateur(client, config.generation, prompt)
+            print(f"Question : {args.question}\n")
+            if avec_agent:
+                from assistant_regles.rag.agent import AgentRecherche, decrire_appel
+
+                agent = AgentRecherche(client, moteur, config.agent, prompt_agent)
+                selection = agent.chercher(args.question, au_fil=lambda appel: print("  " + decrire_appel(appel)))
+                print(f"  ({selection.tours} tour(s), {selection.duree:.1f} s, fin : {selection.fin})\n")
+                resultats = list(selection.passages)
+            else:
+                resultats = moteur.rechercher(args.question, k)
+            # Agent sans passage retenu : abstention directe, sans appel au générateur
+            reponse = generateur.generer(args.question, resultats) if resultats else generateur.abstention(args.question)
         except (RuntimeError, ValueError, anthropic.APIError) as e:
             logger.error("%s", e)
             return 1
 
-    print(f"Question : {args.question}\n")
     print(formater_reponse(reponse))
     return 0
