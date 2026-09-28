@@ -42,7 +42,11 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
+    "langchain-community<0.4",
     "nbstripout>=0.9.1",
+    "openpyxl>=3.1.5",
+    "plotly>=7.1.0",
+    "ragas>=0.4.3",
     "testcontainers[postgres]>=4.15.0",
 ]
 
