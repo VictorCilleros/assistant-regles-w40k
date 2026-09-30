@@ -29,6 +29,7 @@ agent:
   max_tokens: 16000    # par tour, réflexion comprise
   max_tours: 6         # appels au modèle pour la recherche (le dernier sert à conclure)
   max_passages: 8      # taille maximale de la sélection transmise au générateur
+  min_passages: 5      # sélection complétée jusqu'à ce minimum avec les passages vus (0 = pas de complément)
   k: 5                 # passages par recherche (amorce et outil rechercher_regles)
   amorce: true         # première recherche faite par le code avec la question brute
   prompt: agent_vf.md  # fichier dans src/assistant_regles/rag/prompts/

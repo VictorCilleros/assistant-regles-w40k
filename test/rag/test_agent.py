@@ -121,7 +121,8 @@ def test_recherche_complete():
     )
     source = FausseSource()
     etapes = []
-    selection = _agent(client, source).chercher("Mes gars ont couru, ils tirent ?", au_fil=etapes.append)
+    selection = _agent(client, source, min_passages=0).chercher("Mes gars ont couru, ils tirent ?",
+                                                                au_fil=etapes.append)
 
     assert selection.fin == "retenue"
     assert [r.code for r in selection.passages] == ["03.04", "01.01"]  # ordre de l'agent, sans doublon ni inventée
@@ -171,7 +172,49 @@ def test_budget_epuise():
 
 def test_limite_de_passages():
     client = FauxClient(_message(_outil("retenir_passages", {"etiquettes": ["P1", "P2"], "justification": "."})))
-    assert len(_agent(client, max_passages=1).chercher("Q ?").passages) == 1
+    assert len(_agent(client, max_passages=1, min_passages=1).chercher("Q ?").passages) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Complément (min_passages)
+# --------------------------------------------------------------------------- #
+def _recherche_puis_selection(etiquettes):
+    """Amorce (P1 01.01, P2 01.02), recherche AVANCER (P3 03.04), lecture 05.03 (P4), puis sélection."""
+    return FauxClient(
+        _message(_outil("rechercher_regles", {"requete": "AVANCER"}), _outil("lire_regle", {"code": "05.03"})),
+        _message(_outil("retenir_passages", {"etiquettes": etiquettes, "justification": "."})),
+    )
+
+
+def test_complement_apres_les_choix_de_l_agent():
+    etapes = []
+    selection = _agent(_recherche_puis_selection(["P3"]), min_passages=3).chercher("Q ?", au_fil=etapes.append)
+    assert [r.code for r in selection.passages] == ["03.04", "01.01", "01.02"]  # choix de l'agent, puis ordre d'arrivée
+    assert selection.nb_complement == 2
+    assert [r.code for r in selection.retenus_par_agent] == ["03.04"]
+    assert etapes[-1] == AppelOutil("complement", "minimum 3 passages", ("01.01", "01.02"))
+
+
+def test_complement_borne_par_les_passages_vus():
+    selection = _agent(_recherche_puis_selection(["P3"]), min_passages=8).chercher("Q ?")
+    assert [r.code for r in selection.passages] == ["03.04", "01.01", "01.02", "05.03"]  # 4 vus seulement
+    assert selection.nb_complement == 3
+
+
+def test_pas_de_complement_si_minimum_atteint():
+    selection = _agent(_recherche_puis_selection(["P4", "P2", "P1"]), min_passages=3).chercher("Q ?")
+    assert [r.code for r in selection.passages] == ["05.03", "01.02", "01.01"]
+    assert selection.nb_complement == 0
+
+
+def test_pas_de_complement_pour_une_selection_vide():
+    selection = _agent(_recherche_puis_selection([]), min_passages=5).chercher("Recette des crêpes ?")
+    assert selection.passages == () and selection.nb_complement == 0   # l'abstention est préservée
+
+
+def test_min_passages_zero_desactive_le_complement():
+    selection = _agent(_recherche_puis_selection(["P3"]), min_passages=0).chercher("Q ?")
+    assert [r.code for r in selection.passages] == ["03.04"]
 
 
 def test_sans_amorce():

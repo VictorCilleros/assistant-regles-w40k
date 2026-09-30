@@ -79,6 +79,8 @@ def test_valeurs_par_defaut(tmp_path):
         ("agent", "effort", "fort"),
         ("agent", "max_tours", 1),        # au moins un tour de recherche et un pour conclure
         ("agent", "max_passages", 0),
+        ("agent", "min_passages", -1),
+        ("agent", "min_passages", 9),     # supérieur à max_passages (8)
         ("agent", "prompt", "../agent.md"),
     ],
 )

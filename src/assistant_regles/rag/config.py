@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from assistant_regles.ingest.config import trouver_racine
 
@@ -77,9 +77,17 @@ class ParamsAgent(BaseModel):
     max_tokens: int = Field(default=16_000, gt=0)
     max_tours: int = Field(default=6, ge=2)  # au moins un tour de recherche et un pour conclure
     max_passages: int = Field(default=8, gt=0)
+    min_passages: int = Field(default=5, ge=0)  # complément avec les passages vus ; 0 = aucun
     k: int = Field(default=5, gt=0)
     amorce: bool = True
     prompt: str = Field(default="agent_vf.md", pattern=r"^[\w.-]+\.md$")
+
+    @model_validator(mode="after")
+    def verifier_bornes(self) -> ParamsAgent:
+        """Le minimum de passages ne peut pas dépasser le maximum."""
+        if self.min_passages > self.max_passages:
+            raise ValueError("min_passages doit être inférieur ou égal à max_passages")
+        return self
 
 
 class ConfigRag(BaseModel):

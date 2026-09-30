@@ -23,6 +23,12 @@ Fins possibles de la recherche (:attr:`Selection.fin`) :
 
 Dans les trois cas de repli, les passages vus sont retenus dans l'ordre, dans la
 limite de ``max_passages``.
+
+**Complément** (``min_passages``) : quand l'agent retient moins de passages que
+le minimum, sa sélection est complétée avec les passages qu'il a vus sans les
+retenir, dans leur ordre d'arrivée (amorce, puis recherches). Ses propres choix
+restent en tête, dans son ordre d'importance. Une sélection **vide** n'est pas
+complétée : c'est une décision d'abstention.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ logger = logging.getLogger(__name__)
 OUTIL_RECHERCHE = "rechercher_regles"
 OUTIL_LECTURE = "lire_regle"
 OUTIL_FIN = "retenir_passages"
+ETAPE_COMPLEMENT = "complement"
 RAPPEL_BUDGET = "Budget de recherche épuisé : appelle maintenant retenir_passages avec les passages utiles."
 
 type Fin = Literal["retenue", "repli_etiquettes", "repli_texte", "repli_budget"]
@@ -137,7 +144,7 @@ def definir_outils(max_passages: int) -> list[dict[str, Any]]:
 class AppelOutil:
     """Une étape de la recherche, telle qu'on l'affiche (en direct ou dans la trace)."""
 
-    outil: str  # amorce | rechercher_regles | lire_regle | retenir_passages
+    outil: str  # amorce | rechercher_regles | lire_regle | retenir_passages | complement
     argument: str
     codes: tuple[str | None, ...] = ()
     erreur: str | None = None
@@ -150,6 +157,7 @@ def decrire_appel(appel: AppelOutil) -> str:
         OUTIL_RECHERCHE: "Recherche",
         OUTIL_LECTURE: "Lecture de la règle",
         OUTIL_FIN: "Passages retenus",
+        ETAPE_COMPLEMENT: "Complément",
     }
     codes = ", ".join(c or "(sans code)" for c in appel.codes) or "aucun"
     suite = f"erreur : {appel.erreur}" if appel.erreur else codes
@@ -170,6 +178,12 @@ class Selection:
     tokens_sortie: int
     duree: float
     modele: str
+    nb_complement: int = 0  # passages ajoutés en fin de sélection pour atteindre min_passages
+
+    @property
+    def retenus_par_agent(self) -> tuple[Resultat, ...]:
+        """Passages choisis par l'agent lui-même, sans le complément."""
+        return self.passages[: len(self.passages) - self.nb_complement]
 
     @property
     def nb_appels_outils(self) -> int:
@@ -251,6 +265,14 @@ class AgentRecherche:
         return ({"type": "tool_result", "tool_use_id": bloc.id, "content": etiqueteur.blocs(trouves)},
                 AppelOutil(bloc.name, argument, tuple(r.code for r in trouves)))
 
+    def _completer(self, passages: list[Resultat], etiqueteur: _Etiqueteur) -> list[Resultat]:
+        """Passages vus non retenus, dans l'ordre d'arrivée, pour atteindre le minimum."""
+        manque = min(self._params.min_passages, self._params.max_passages) - len(passages)
+        if manque <= 0:
+            return []
+        retenus = {r.id for r in passages}
+        return [r for r in etiqueteur.par_etiquette.values() if r.id not in retenus][:manque]
+
     def chercher(self, question: str, au_fil: Callable[[AppelOutil], None] | None = None) -> Selection:
         """Cherche les passages utiles à la question.
 
@@ -269,6 +291,7 @@ class AgentRecherche:
         appels: list[AppelOutil] = []
         tokens_entree = tokens_sortie = 0
         passages: list[Resultat] = []
+        complement: list[Resultat] = []
         justification, fin = "", "repli_budget"
         debut = time.perf_counter()
 
@@ -306,6 +329,12 @@ class AgentRecherche:
                     fin = "retenue"
                     passages = [etiqueteur.par_etiquette[e] for e in connues][: p.max_passages]
                     noter(AppelOutil(OUTIL_FIN, ", ".join(etiquettes) or "(aucun)", tuple(r.code for r in passages)))
+                    if passages:  # sélection vide = abstention décidée par l'agent : pas de complément
+                        complement = self._completer(passages, etiqueteur)
+                    if complement:
+                        passages += complement
+                        noter(AppelOutil(ETAPE_COMPLEMENT, f"minimum {p.min_passages} passages",
+                                         tuple(r.code for r in complement)))
                 break
             if not demandes:
                 fin = "repli_texte"
@@ -337,4 +366,5 @@ class AgentRecherche:
             tokens_sortie=tokens_sortie,
             duree=time.perf_counter() - debut,
             modele=p.modele,
+            nb_complement=len(complement),
         )

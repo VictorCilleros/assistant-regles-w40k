@@ -47,8 +47,15 @@ def test_tableau_configuration():
 
 def test_legende_agent(selection_factice):
     legende = legende_agent(selection_factice)
-    assert legende == ("agent claude-sonnet-5 · 2 tour(s) · 1 recherche(s) · 1/2 passages retenus · "
+    assert legende == ("agent claude-sonnet-5 · 2 tour(s) · 1 recherche(s) · 1 passage(s) retenu(s) sur 2 vus · "
                        "3000 → 200 tokens · 4.2 s")
+
+
+def test_legende_agent_avec_complement(selection_factice):
+    from dataclasses import replace
+
+    legende = legende_agent(replace(selection_factice, passages=selection_factice.passages * 3, nb_complement=2))
+    assert "1 passage(s) retenu(s) + 2 en complément sur 2 vus" in legende
 
 
 def test_tableau_configuration_agent():

@@ -59,9 +59,10 @@ def legende_technique(reponse: Reponse) -> str:
 def legende_agent(selection: Selection) -> str:
     """Ligne discrète sur la recherche de l'agent."""
     repli = f" · fin par repli ({selection.fin})" if selection.fin != "retenue" else ""
+    complement = f" + {selection.nb_complement} en complément" if selection.nb_complement else ""
     return (
         f"agent {selection.modele} · {selection.tours} tour(s) · {selection.nb_appels_outils} recherche(s) · "
-        f"{len(selection.passages)}/{selection.vus} passages retenus · "
+        f"{len(selection.retenus_par_agent)} passage(s) retenu(s){complement} sur {selection.vus} vus · "
         f"{selection.tokens_entree} → {selection.tokens_sortie} tokens · {selection.duree:.1f} s{repli}"
     )
 
@@ -79,7 +80,7 @@ def tableau_configuration(
     agent = [
         ("Agent de recherche", f"{'activé' if a.actif else 'désactivé'} par défaut"),
         ("Modèle de l'agent", f"{a.modele} (effort {a.effort or 'par défaut'})"),
-        ("Budget de l'agent", f"{a.max_tours} tours, {a.max_passages} passages retenus au plus, "
+        ("Budget de l'agent", f"{a.max_tours} tours, {a.min_passages} à {a.max_passages} passages transmis, "
                               f"{a.k} passages par recherche, amorce {'activée' if a.amorce else 'désactivée'}"),
         ("Prompt de l'agent", f"{a.prompt} [{prompt_agent.empreinte[:8]}]" if prompt_agent else a.prompt),
     ]
