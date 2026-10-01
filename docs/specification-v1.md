@@ -142,7 +142,7 @@ L'agent ne répond pas au joueur : il **choisit les passages** que le générate
 - **Abstention :** phrase fixe, définie dans la configuration, dont la présence dans le prompt est vérifiée au chargement. Une réponse qui **commence** par cette phrase est comptée comme abstention.
 - **Traçabilité :** chaque réponse porte le modèle, le nom du prompt, son empreinte sha256, les tokens et la durée.
 - **Streaming :** le texte est affiché au fil de l'eau, puis remplacé par la version finale avec ses notes de citation.
-- **Commande :** `uv run repondre-regles "question" [--agent | --sans-agent]`.
+- **Commande :** `uv run repondre-regles "question" [--agent | --no-agent]`.
 
 ---
 

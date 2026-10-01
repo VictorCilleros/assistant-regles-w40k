@@ -141,7 +141,7 @@ Commandes de diagnostic :
 ```bash
 uv run chercher-regles "Les pistolets peuvent-ils tirer au corps à corps ?" -k 5 --complet
 uv run repondre-regles "Les pistolets peuvent-ils tirer au corps à corps ?" --agent
-uv run repondre-regles "…" --sans-agent
+uv run repondre-regles "…" --no-agent
 ```
 
 ## Configuration
