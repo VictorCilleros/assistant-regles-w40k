@@ -1,8 +1,8 @@
 # Assistant de règles — Warhammer 40 000
 
-Assistant conversationnel qui répond à des questions précises sur un corpus de règles, en s'appuyant **uniquement** sur ce corpus et en citant ses sources (code de règle, page).
+Assistant conversationnel qui répond à des questions précises sur un corpus de règles, en s'appuyant uniquement sur ce corpus et en citant ses sources (code de règle, page).
 
-**Version 1** : recherche documentaire (RAG) sur le livre de règles de base, agent de recherche qui reformule et explore le livre avant de répondre, génération avec citations natives, interface Streamlit, et évaluation sur un gold set de 100 questions.
+**Version 1.1.2** : recherche documentaire (RAG) sur le livre de règles de base, agent de recherche qui reformule et explore le livre avant de répondre, génération avec citations natives, conversation suivie (questions de suite), interface Streamlit, et évaluation sur un gold set de 100 questions.
 
 ## Le problème traité
 
@@ -10,7 +10,7 @@ De nombreuses organisations s'appuient sur des corpus de règles à deux niveaux
 
 Ce projet construit un assistant qui prend en charge ce raisonnement :
 
-- l'utilisateur décrit sa situation et son doute en langage naturel, **avec ses propres mots** ;
+- l'utilisateur décrit sa situation et son doute en langage naturel avec ses propres mots, et peut enchaîner les questions de suite ;
 - l'assistant retrouve les passages pertinents, y compris les exceptions rangées ailleurs que la règle générale ;
 - il répond en citant chaque passage utilisé (code de règle, page) ;
 - il répond « je ne trouve pas la réponse » lorsque le corpus ne permet pas de conclure, plutôt que d'inventer.
@@ -30,7 +30,7 @@ Deux difficultés rendent ce corpus intéressant :
 - **Le vocabulaire.** Les joueurs n'emploient pas les termes du livre (« mes gars ont couru » pour une unité qui a *avancé*), et la bonne réponse combine souvent une règle générale et une exception décrite plus loin.
 - **La date.** La 11e édition est sortie en juin 2026, après la date de fin d'entraînement de nombreux LLM, qui connaissent surtout l'édition précédente. Sans recherche documentaire, un modèle risque de mélanger les deux éditions avec assurance : c'est un bon terrain pour mesurer la fidélité des réponses au corpus.
 
-La version 1 couvre le **livre de règles de base**. Les règles d'armée (le second niveau) sont prévues pour la version 2 : la base est déjà conçue pour accueillir plusieurs sources.
+Les versions 1.x couvrent le livre de règles de base. Les règles d'armée (le second niveau) sont prévues pour la version 2 : la base est déjà conçue pour accueillir plusieurs sources.
 
 ## Architecture
 
@@ -42,6 +42,8 @@ flowchart LR
     IDX --> DB[("PostgreSQL<br/>+ pgvector")]
 
     Q["Question du joueur"] --> MODE{"Mode agent ?"}
+    H["Historique<br/>(4 derniers échanges)"] -.-> AG
+    H -.-> GEN
     MODE -- oui --> AG["Agent de recherche<br/>Claude Sonnet 5 + outils"]
     MODE -- non --> TOPK["Recherche top-k"]
     AG <--> DB
@@ -53,10 +55,20 @@ flowchart LR
 
 Le traitement d'une question se fait en **deux étapes aux rôles séparés** :
 
-1. **Recherche.** En mode agent, un premier modèle reformule la question avec le vocabulaire du livre, lance plusieurs recherches, suit les renvois entre règles, puis **sélectionne** les passages utiles. Sans agent, la question brute sert directement à une recherche top-k.
-2. **Génération.** Un second appel rédige la réponse **à partir de ces passages seulement**, avec des citations structurées fournies par l'API.
+1. **Recherche.** En mode agent, un premier modèle reformule la question avec le vocabulaire du livre, lance plusieurs recherches, suit les renvois entre règles, puis sélectionne les passages utiles. Sans agent, la question brute sert directement à une recherche top-k.
+2. **Génération.** Un second appel rédige la réponse à partir de ces passages seulement, avec des citations structurées fournies par l'API.
 
 Séparer les deux rôles permet d'évaluer la recherche indépendamment de la génération, de réutiliser le même générateur dans les deux modes, et de lui transmettre un contexte trié plutôt que tout ce que l'agent a consulté.
+
+### Conversation suivie
+
+Le joueur peut enchaîner les questions de suite (« et au corps à corps ? », « et si c'est un véhicule ? ») :
+
+- **l'agent** reçoit les 4 derniers échanges (questions, réponses tronquées) et les codes des règles déjà citées. Il reformule la question de suite en question autonome, relit au besoin les règles déjà citées, puis cherche. Sa recherche initiale porte sur la question précédente suivie de la question courante ;
+- **le générateur** reçoit ces échanges comme une vraie conversation, mais seuls les passages du tour en cours sont des sources : une règle évoquée plus tôt doit être retrouvée à nouveau pour être réaffirmée. L'ancrage et la numérotation des citations restent ainsi propres à chaque réponse ;
+- le bouton **« Nouvelle conversation »** efface ce contexte.
+
+Les passages des tours précédents ne sont jamais retransmis : le coût d'une question reste borné, quelle que soit la longueur de la conversation.
 
 ## Choix techniques
 
@@ -67,6 +79,7 @@ Séparer les deux rôles permet d'évaluer la recherche indépendamment de la g�
 | Embeddings | **BGE-M3** (dense, 1024 dimensions), révision épinglée, fp16 sur GPU | Multilingue, solide en français ; vecteurs reproductibles |
 | Base vectorielle | **PostgreSQL 18 + pgvector 0.8**, index HNSW cosinus, via Docker Compose | Une seule base pour vecteurs et métadonnées ; reconstructible en une commande |
 | Génération | **Claude Sonnet 5**, effort `medium`, citations natives (blocs `search_result`), citations par paragraphe | Une citation ne peut désigner qu'un passage réellement fourni |
+| Prompts | Sections balisées en XML, entrées balisées (historique, passages, question), exemples de réponse pour le générateur | Structure explicite pour le modèle ; format de réponse montré plutôt que décrit |
 | Agent de recherche | **Claude Sonnet 5**, effort `high`, 3 outils : recherche, lecture d'une règle par code, sélection finale | La reformulation et l'exploration sont la partie difficile du raisonnement |
 | Interface | **Streamlit** : chat en streaming, étapes de l'agent en direct, sources dépliables | Démonstration lisible du fonctionnement interne |
 | Évaluation | Métriques de retrieval maison + **RAGAS** (juge Claude Haiku 4.5), visualisation plotly | Chaque brique ajoutée doit améliorer un chiffre |
@@ -80,15 +93,18 @@ Les choix détaillés, leurs justifications et les écarts avec la spécificatio
 - **Traçabilité des prompts.** Chaque réponse porte le nom du prompt système et son empreinte (sha256) : on sait toujours quel texte a produit quelle réponse, même si le fichier a été modifié entre deux évaluations.
 - **Garde-fou de modèle.** Chaque vecteur stocké porte l'identifiant du modèle qui l'a produit (nom et révision). La recherche refuse de démarrer si la base a été indexée avec un autre modèle : sans ce contrôle, les résultats seraient absurdes sans aucune erreur.
 - **Indexation idempotente.** Upsert sur des identifiants déterministes et suppression des passages orphelins, par source et par édition, dans une seule transaction : relancer l'indexation après un changement de découpage ne laisse aucun passage périmé.
+- **Prompts structurés.** Les deux prompts sont découpés en sections XML (rôle, contexte, entrées, méthode, règles, style) et décrivent exactement les balises que le code produit (`<historique_conversation>`, `<recherche_initiale>`, `<passage>`, `<question_joueur>`…). Tout texte inséré dans une balise est échappé, et des tests vérifient que chaque balise produite est bien décrite dans le prompt. Le générateur dispose de deux exemples de réponse, présentés explicitement comme des modèles de forme et non comme des sources.
 - **Sélection minimale de l'agent.** Si l'agent retient moins de passages que le minimum configuré, sa sélection est complétée avec les passages qu'il a consultés, sans modifier son ordre de priorité. Cela couvre les exceptions et précisions qu'il aurait écartées sur une question simple.
 
-### Piste testée et non retenue
+### Pistes testées ou étudiées, non retenues
 
 **Recherche plein texte comme outil de l'agent** ([notebook 09](notebooks/09_exploration_recherche_texte.ipynb)). Sur 16 requêtes en vocabulaire du livre, la recherche dense trouvait déjà le bon passage en tête dans la grande majorité des cas. La recherche plein texte n'apportait un gain net que sur une requête, et ajoutait surtout du bruit (règles longues et denses en mots-clés). Elle n'a pas été intégrée ; elle sera réévaluée si l'analyse des échecs montre des ratés liés à des termes exacts.
 
+**Mise en cache des prompts (prompt caching).** Étudiée : elle réduirait surtout le coût des tours successifs de l'agent. Pour un usage interactif, le gain ne justifie pas la complexité ; elle est réservée à l'évaluation, où les appels s'enchaînent en grand nombre.
+
 ## Évaluation
 
-L'évaluation compare plusieurs configurations sur un **gold set de 100 questions**, rédigées en langage de joueur et relues à la main. Chaque question porte ses références attendues (code de règle et/ou page), une réponse de référence et une catégorie (concepts de base, vocabulaire de joueur, règles proches, multi-sections, hors corpus…).
+L'évaluation compare plusieurs configurations sur un gold set de 100 questions, rédigées en langage de joueur et relues à la main. Chaque question porte ses références attendues (code de règle et/ou page), une réponse de référence et une catégorie (concepts de base, vocabulaire de joueur, règles proches, multi-sections, hors corpus…).
 
 | Famille | Métriques |
 |---|---|
@@ -102,6 +118,8 @@ L'évaluation compare plusieurs configurations sur un **gold set de 100 question
 |---|---|---|---|---|---|---|---|
 | Baseline (top-5, sans agent) | 0,94 | 0,76 | 0,78 | 0,73 | 1,00 | ~1,6 c$ | ~7,6 s |
 | Agent (Sonnet 5, effort `high`) | *à mesurer* | | | | | | |
+
+Le gold set ne contient pour l'instant que des questions isolées : la conversation suivie n'est pas encore évaluée (des mini-dialogues de 2 ou 3 tours sont prévus). Les chiffres ci-dessus précèdent par ailleurs les prompts structurés de la version 1.1.
 
 L'évaluation se trouve dans [`notebooks/08_evaluation.ipynb`](notebooks/08_evaluation.ipynb). Les résultats sont mis en cache par configuration et par question : relancer l'évaluation ne recalcule que ce qui manque.
 
@@ -125,6 +143,8 @@ docker compose up -d    # PostgreSQL + pgvector
 ```
 
 Placez le PDF des règles de base dans `data/core-rules/` (dossier ignoré par Git), et vérifiez son chemin dans `config/ingest/pipeline.yaml`.
+
+**Sous Windows, sans GPU :** suivez le guide pas à pas [`docs/installation-windows-cpu.md`](docs/installation-windows-cpu.md). Il évite l'ingestion (inutile pour utiliser l'assistant) en transférant le fichier de passages déjà découpés, et détaille les pièges propres à Windows (Docker Desktop, mode hors ligne du modèle au premier lancement, encodage).
 
 ## Utilisation
 
@@ -152,7 +172,7 @@ Tous les réglages sont dans des fichiers YAML validés au chargement : une clé
 |---|---|
 | `config/ingest/pipeline.yaml` | Chemins, options Docling, seuils de nettoyage, budget de découpage |
 | `config/ingest/structure_livre.yaml` | Chapitres, sections et pages du livre |
-| `config/rag/rag.yaml` | Modèle d'embedding, recherche (k), génération (modèle, effort, granularité, prompt), agent (modèle, effort, budget, `min_passages`) |
+| `config/rag/rag.yaml` | Modèle d'embedding, recherche (k), génération (modèle, effort, granularité, prompt), agent (modèle, effort, budget, `min_passages`, historique) |
 | `src/assistant_regles/rag/prompts/` | Prompts du générateur (`systeme_vf.md`) et de l'agent (`agent_vf.md`), relus à chaque question |
 | `config/ui/` | Textes, apparence, registre des documents et page d'informations de l'interface |
 | `.streamlit/config.toml` | Thème de l'interface (couleurs, polices) |
@@ -172,10 +192,12 @@ assistant-regles-w40k/
 │   │   ├── pipeline.py           # commande indexer-regles
 │   │   ├── recherche.py          # recherche top-k, lecture par code
 │   │   ├── agent.py              # agent de recherche
+│   │   ├── conversation.py       # historique transmis à l'agent et au générateur
 │   │   ├── generation.py         # génération citée, streaming, commande repondre-regles
 │   │   ├── prompts/              # prompts versionnés
 │   │   └── sql/schema.sql
 │   └── ui/                       # interface Streamlit
+├── docs/                         # spécification, installation Windows
 ├── notebooks/                    # explorations (03 à 07, 09) et évaluation (08)
 └── test/                         # tests pytest (ingest, rag, ui)
 ```
@@ -195,19 +217,31 @@ Les appels à l'API et au modèle sont remplacés par des doubles de test dans l
 
 ## Limites et suite
 
-**Limites de la version 1 :**
+**Limites de la version 1.1 :**
 
-- chaque question est traitée indépendamment : l'assistant ne tient pas compte des échanges précédents ;
+- la conversation suivie repose sur l'agent : sans mode agent, la recherche porte sur la question brute, et une question de suite y donne de mauvais résultats ;
+- seuls les 4 derniers échanges sont pris en compte ;
 - seul le livre de règles de base est indexé ;
 - le mode agent est plus lent et plus coûteux que la recherche simple (plusieurs appels au modèle avant la réponse) ;
 - Claude Sonnet 5 n'accepte pas de température fixe : deux exécutions d'une même évaluation peuvent légèrement différer.
 
-**Version 2 envisagée :**
+**Suite envisagée :**
 
-- historique de conversation (questions de suite reformulées par l'agent) ;
+- évaluation complète de la version 1.1 : agent, prompts structurés, mini-dialogues pour la conversation suivie ; mise en cache des prompts pour réduire le coût des évaluations ;
+- portage simplifié : commandes d'export et d'import de la base, conteneurisation de l'application ;
 - règles d'armée, et raisonnement sur l'articulation entre règle générale et dérogation ;
-- conteneurisation de l'application et intégration continue (GitHub Actions) ;
+- intégration continue (GitHub Actions) ;
 - recherche hybride ou reranking, seulement si l'évaluation montre un gain.
+
+## Historique des versions
+
+| Version | Contenu |
+|---|---|
+| **1.1.2** | Prompt du générateur structuré en sections XML, avec deux exemples de réponse ; question balisée |
+| **1.1.1** | Prompt de l'agent structuré en sections XML ; historique, recherche initiale, passages et question balisés |
+| **1.1.0** | Conversation suivie : historique des 4 derniers échanges transmis à l'agent et au générateur |
+| **1.0.1** | Guide d'installation Windows sans GPU ; correction de l'option `--no-agent` dans la documentation |
+| **1.0.0** | RAG sur le livre de règles de base, agent de recherche, citations natives, interface Streamlit, évaluation |
 
 ## Données et propriété intellectuelle
 
