@@ -64,10 +64,38 @@ def test_historique_reaffiche_la_trace(app):
     assert any("passage(s) retenu(s)" in e.label for e in app.get("status")), "trace absente de l'historique"
 
 
-def test_nouvelle_conversation(app):
+def test_nouvelle_conversation(app, ressources_factices):
     app.chat_input[0].set_value("Question ?").run()
     app.sidebar.button[0].click().run()
     assert app.session_state.historique == []
+    app.chat_input[0].set_value("Autre sujet ?").run()
+    assert ressources_factices.historiques[-1] == []   # le contexte repart de zéro
+
+
+def test_question_de_suite_transmet_l_historique(app, ressources_factices):
+    app.chat_input[0].set_value("Les pistolets peuvent-ils tirer ?").run()
+    app.chat_input[0].set_value("Et au corps à corps ?").run()
+    assert not app.exception
+
+    assert ressources_factices.historiques[0] == []
+    (tour,) = ressources_factices.historiques[1]
+    assert tour.question == "Les pistolets peuvent-ils tirer ?"
+    assert tour.codes_cites == ("24.20",)
+
+    messages = ressources_factices.client.appels[-1]["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user"]
+    assert messages[0]["content"] == "Les pistolets peuvent-ils tirer ?"
+
+
+def test_erreur_exclue_de_l_historique(app, ressources_factices, monkeypatch):
+    from assistant_regles.ui import ressources
+
+    agent = ressources.agent(None)
+    monkeypatch.setattr(ressources, "agent", lambda config_rag: (_ for _ in ()).throw(RuntimeError("panne")))
+    app.chat_input[0].set_value("Question en erreur ?").run()
+    monkeypatch.setattr(ressources, "agent", lambda config_rag: agent)
+    app.chat_input[0].set_value("Question suivante ?").run()
+    assert ressources_factices.historiques[-1] == []   # l'échange en erreur n'est pas transmis
 
 
 def test_erreur_affichee_sans_casser_la_page(app, monkeypatch):

@@ -66,7 +66,8 @@ def generateur(config_rag: ConfigRag) -> Generateur:
     from assistant_regles.rag.generation import Generateur, charger_prompt
 
     g = config_rag.generation
-    return Generateur(client_anthropic(), g, charger_prompt(g.prompt_systeme, g.phrase_abstention))
+    return Generateur(client_anthropic(), g, charger_prompt(g.prompt_systeme, g.phrase_abstention),
+                      config_rag.agent.historique_max_caracteres)
 
 
 def agent(config_rag: ConfigRag) -> AgentRecherche:

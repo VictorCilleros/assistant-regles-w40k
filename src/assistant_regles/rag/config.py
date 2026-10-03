@@ -80,6 +80,9 @@ class ParamsAgent(BaseModel):
     min_passages: int = Field(default=5, ge=0)  # complément avec les passages vus ; 0 = aucun
     k: int = Field(default=5, gt=0)
     amorce: bool = True
+    amorce_suivi: Literal["concatenation", "aucune"] = "concatenation"  # amorce des questions de suite
+    historique_tours: int = Field(default=4, ge=0)  # tours précédents transmis ; 0 = sans historique
+    historique_max_caracteres: int = Field(default=2000, gt=0)  # longueur max d'une réponse transmise
     prompt: str = Field(default="agent_vf.md", pattern=r"^[\w.-]+\.md$")
 
     @model_validator(mode="after")

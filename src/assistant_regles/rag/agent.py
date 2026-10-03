@@ -29,20 +29,33 @@ le minimum, sa sélection est complétée avec les passages qu'il a vus sans les
 retenir, dans leur ordre d'arrivée (amorce, puis recherches). Ses propres choix
 restent en tête, dans son ordre d'importance. Une sélection **vide** n'est pas
 complétée : c'est une décision d'abstention.
+
+**Format des messages** (balises XML, décrites dans le prompt de l'agent) :
+``<historique_conversation>`` puis ``<recherche_initiale>`` puis ``<question_joueur>``
+dans le premier message ; chaque passage dans une balise ``<passage>`` (étiquette,
+code, pages, titre, renvois). Le prompt et ce format doivent évoluer ensemble.
+
+**Historique** : pour une question de suite, l'agent reçoit en tête les tours
+précédents (questions, réponses tronquées, codes cités ; voir conversation.py).
+L'amorce suit ``amorce_suivi`` : ``concatenation`` cherche avec la question
+précédente suivie de la question courante, ``aucune`` laisse l'agent chercher seul.
 """
 
 from __future__ import annotations
 
+import html
 import logging
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from assistant_regles.rag.conversation import texte_pour_agent
 from assistant_regles.rag.generation import PromptSysteme, empreinte_texte, lire_prompt, titre_resultat
 
 if TYPE_CHECKING:
     from assistant_regles.rag.config import ParamsAgent
+    from assistant_regles.rag.conversation import TourConversation
     from assistant_regles.rag.recherche import Resultat
 
 logger = logging.getLogger(__name__)
@@ -51,7 +64,10 @@ OUTIL_RECHERCHE = "rechercher_regles"
 OUTIL_LECTURE = "lire_regle"
 OUTIL_FIN = "retenir_passages"
 ETAPE_COMPLEMENT = "complement"
-RAPPEL_BUDGET = "Budget de recherche épuisé : appelle maintenant retenir_passages avec les passages utiles."
+RAPPEL_BUDGET = (
+    "<rappel_budget>Budget de recherche épuisé : appelle maintenant retenir_passages "
+    "avec les passages utiles.</rappel_budget>"
+)
 
 type Fin = Literal["retenue", "repli_etiquettes", "repli_texte", "repli_budget"]
 
@@ -191,6 +207,21 @@ class Selection:
         return sum(a.outil in (OUTIL_RECHERCHE, OUTIL_LECTURE) for a in self.appels)
 
 
+def _attribut(valeur: str) -> str:
+    """Valeur d'attribut XML échappée (guillemets compris)."""
+    return html.escape(valeur, quote=True)
+
+
+def baliser_passage(etiquette: str, r: Resultat) -> str:
+    """Un passage tel que l'agent le lit (format décrit dans son prompt)."""
+    pages = f"{r.page_debut}" + (f"-{r.page_fin}" if r.page_fin != r.page_debut else "")
+    renvois = f' renvois="{_attribut(", ".join(r.codes_cites))}"' if r.codes_cites else ""
+    return (
+        f'<passage etiquette="{etiquette}" code="{_attribut(r.code or "")}" pages="{pages}"'
+        f' titre="{_attribut(titre_resultat(r))}"{renvois}>\n{r.texte}\n</passage>'
+    )
+
+
 class _Etiqueteur:
     """Étiquettes courtes (P1, P2…) des passages montrés à l'agent."""
 
@@ -198,9 +229,9 @@ class _Etiqueteur:
         self.par_etiquette: dict[str, Resultat] = {}
         self._par_id: dict[Any, str] = {}
 
-    def blocs(self, resultats: Sequence[Resultat]) -> list[dict[str, str]]:
-        """Blocs texte pour l'agent : nouveaux passages en entier, déjà vus en simple rappel."""
-        blocs, deja = [], []
+    def baliser(self, resultats: Sequence[Resultat]) -> str:
+        """Nouveaux passages en entier ; passages déjà vus rappelés par leur étiquette."""
+        morceaux, deja = [], []
         for r in resultats:
             if r.id in self._par_id:
                 deja.append(self._par_id[r.id])
@@ -208,11 +239,10 @@ class _Etiqueteur:
             etiquette = f"P{len(self.par_etiquette) + 1}"
             self.par_etiquette[etiquette] = r
             self._par_id[r.id] = etiquette
-            renvois = f" — renvois : {', '.join(r.codes_cites)}" if r.codes_cites else ""
-            blocs.append({"type": "text", "text": f"[{etiquette}] {titre_resultat(r)}{renvois}\n{r.texte}"})
+            morceaux.append(baliser_passage(etiquette, r))
         if deja:
-            blocs.append({"type": "text", "text": f"Déjà fournis plus haut : {', '.join(deja)}."})
-        return blocs or [{"type": "text", "text": "Aucun passage trouvé."}]
+            morceaux.append(f"<deja_fournis>{', '.join(deja)}</deja_fournis>")
+        return "\n".join(morceaux) or "<aucun_passage />"
 
 
 # --------------------------------------------------------------------------- #
@@ -262,7 +292,8 @@ class AgentRecherche:
             logger.warning("Outil %s en erreur : %s", bloc.name, e)
             return ({"type": "tool_result", "tool_use_id": bloc.id, "content": f"Erreur : {e}", "is_error": True},
                     AppelOutil(bloc.name, argument, erreur=str(e)))
-        return ({"type": "tool_result", "tool_use_id": bloc.id, "content": etiqueteur.blocs(trouves)},
+        return ({"type": "tool_result", "tool_use_id": bloc.id,
+                 "content": [{"type": "text", "text": etiqueteur.baliser(trouves)}]},
                 AppelOutil(bloc.name, argument, tuple(r.code for r in trouves)))
 
     def _completer(self, passages: list[Resultat], etiqueteur: _Etiqueteur) -> list[Resultat]:
@@ -273,12 +304,28 @@ class AgentRecherche:
         retenus = {r.id for r in passages}
         return [r for r in etiqueteur.par_etiquette.values() if r.id not in retenus][:manque]
 
-    def chercher(self, question: str, au_fil: Callable[[AppelOutil], None] | None = None) -> Selection:
+    def requete_amorce(self, question: str, historique: Sequence[TourConversation]) -> str | None:
+        """Requête de l'amorce, ou None si pas d'amorce pour ce tour."""
+        if not self._params.amorce:
+            return None
+        if not historique:
+            return question
+        if self._params.amorce_suivi == "concatenation":
+            return f"{historique[-1].question} {question}"
+        return None
+
+    def chercher(
+        self,
+        question: str,
+        au_fil: Callable[[AppelOutil], None] | None = None,
+        historique: Sequence[TourConversation] = (),
+    ) -> Selection:
         """Cherche les passages utiles à la question.
 
         Args:
             question: question du joueur.
             au_fil: fonction appelée à chaque étape (affichage en direct dans l'interface).
+            historique: tours précédents à prendre en compte (fenêtre déjà appliquée par l'appelant).
 
         Raises:
             ValueError: question vide.
@@ -301,12 +348,17 @@ class AgentRecherche:
             notifier(appel)
 
         contenu: list[dict[str, str]] = []
-        if p.amorce:
-            initiaux = self._source.rechercher(question, p.k)
-            contenu.append({"type": "text", "text": "Passages trouvés par une première recherche avec la question brute :"})
-            contenu += etiqueteur.blocs(initiaux)
-            noter(AppelOutil("amorce", question, tuple(r.code for r in initiaux)))
-        contenu.append({"type": "text", "text": f"Question du joueur : {question}"})
+        if historique:
+            contenu.append({"type": "text", "text": texte_pour_agent(historique, p.historique_max_caracteres)})
+        requete_amorce = self.requete_amorce(question, historique)
+        if requete_amorce is not None:
+            initiaux = self._source.rechercher(requete_amorce, p.k)
+            contenu.append({"type": "text", "text": (
+                f'<recherche_initiale requete="{_attribut(requete_amorce)}">\n'
+                f"{etiqueteur.baliser(initiaux)}\n</recherche_initiale>"
+            )})
+            noter(AppelOutil("amorce", requete_amorce, tuple(r.code for r in initiaux)))
+        contenu.append({"type": "text", "text": f"<question_joueur>{html.escape(question, quote=False)}</question_joueur>"})
         messages: list[dict[str, Any]] = [{"role": "user", "content": contenu}]
 
         tour = 0

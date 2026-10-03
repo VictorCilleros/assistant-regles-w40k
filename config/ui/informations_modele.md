@@ -36,8 +36,9 @@ un extrait réellement transmis, affiché sous la réponse.
 
 ### Limites actuelles
 
-- Chaque question est traitée indépendamment : l'assistant ne tient pas compte
-  des questions précédentes.
+- L'assistant tient compte des derniers échanges de la conversation pour
+  comprendre une question de suite, mais il ne s'appuie que sur les passages
+  retrouvés pour la question en cours. « Nouvelle conversation » efface ce contexte.
 - La recherche est purement sémantique (pas encore de recherche hybride ni de
   reclassement des résultats).
 - Le mode agent est plus lent et plus coûteux : il fait plusieurs appels au

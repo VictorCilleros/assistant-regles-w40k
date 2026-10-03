@@ -21,6 +21,9 @@ chat:
   placeholder: "Posez votre question de règles…"
   recherche_en_cours: "Recherche dans le livre de règles…"
   nouvelle_conversation: "Nouvelle conversation"
+  aide_nouvelle_conversation: >-
+    Efface la conversation : la question suivante repart sans tenir compte
+    des échanges précédents.
   titre_sources: "Sources"
   erreur: "Impossible de répondre pour le moment. Vérifiez que la base est démarrée (docker compose up -d)."
   details_erreur: "Détails techniques"

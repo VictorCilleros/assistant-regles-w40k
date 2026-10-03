@@ -33,3 +33,6 @@ agent:
   k: 5                 # passages par recherche (amorce et outil rechercher_regles)
   amorce: true         # première recherche faite par le code avec la question brute
   prompt: agent_vf.md  # fichier dans src/assistant_regles/rag/prompts/
+  amorce_suivi : concatenation # questions de suite : concatenation (question précédente + courante) | aucune
+  historique_tours : 4 #  tours précédents transmis à l'agent et au générateur (0 = questions indépendantes)
+  historique_max_caracteres : 2000 # longueur maximale d'une réponse précédente transmise

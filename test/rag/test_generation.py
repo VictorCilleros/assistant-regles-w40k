@@ -10,6 +10,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from assistant_regles.rag.config import ParamsGeneration
+from assistant_regles.rag.conversation import TourConversation
 from assistant_regles.rag.generation import (
     Generateur,
     PromptSysteme,
@@ -263,3 +264,34 @@ def test_abstention_sans_appel(prompt, params):
     assert client.appels == []
     assert reponse.abstention and reponse.texte == PHRASE
     assert (reponse.stop_reason, reponse.tokens_entree, reponse.citations) == ("sans_passage", 0, [])
+
+
+
+# --------------------------------------------------------------------------- #
+# Historique
+# --------------------------------------------------------------------------- #
+def test_parametres_avec_historique(prompt, params):
+    historique = [TourConversation("Q1 ?", "R1 " + "x" * 100, ("01.00",)), TourConversation("Q2 ?", "R2.")]
+    parametres = Generateur(None, params, prompt, max_caracteres_historique=20).parametres_requete(
+        "Q3 ?", [_resultat()], historique
+    )
+    messages = parametres["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
+    assert messages[0]["content"] == "Q1 ?" and len(messages[1]["content"]) == 20   # réponse tronquée
+    courant = messages[-1]["content"]
+    assert courant[0]["type"] == "text" and "sources" in courant[0]["text"]          # note en tête
+    assert [b["type"] for b in courant[1:]] == ["search_result", "text"]              # un seul jeu de sources
+
+
+def test_sans_historique_message_inchange(prompt, params):
+    messages = Generateur(None, params, prompt).parametres_requete("Q ?", [_resultat()])["messages"]
+    assert len(messages) == 1
+    assert [b["type"] for b in messages[0]["content"]] == ["search_result", "text"]
+
+
+def test_flux_avec_historique(prompt, params):
+    client = FauxClient(_message([NS(type="text", text="Oui.", citations=[_citation(0)])]), morceaux=["Oui."])
+    flux = Generateur(client, params, prompt).generer_en_flux("Q2 ?", [_resultat()], [TourConversation("Q1 ?", "R1.")])
+    "".join(flux)
+    assert len(client.appels[0]["messages"]) == 3
+    assert [c.code for c in flux.reponse.citations] == ["01.00"]   # citations du tour courant inchangées

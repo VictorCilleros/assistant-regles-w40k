@@ -81,6 +81,9 @@ def test_valeurs_par_defaut(tmp_path):
         ("agent", "max_passages", 0),
         ("agent", "min_passages", -1),
         ("agent", "min_passages", 9),     # supérieur à max_passages (8)
+        ("agent", "amorce_suivi", "toujours"),
+        ("agent", "historique_tours", -1),
+        ("agent", "historique_max_caracteres", 0),
         ("agent", "prompt", "../agent.md"),
     ],
 )
@@ -123,3 +126,8 @@ def test_agent_effort_optionnel(tmp_path):
     contenu = _config_valide()
     contenu["agent"]["effort"] = None   # paramètre non envoyé (modèles qui ne l'acceptent pas)
     assert charger_config(_ecrire(tmp_path, contenu)).agent.effort is None
+
+
+def test_agent_historique_par_defaut(tmp_path):
+    agent = charger_config(_ecrire(tmp_path, _config_valide())).agent
+    assert (agent.historique_tours, agent.amorce_suivi, agent.historique_max_caracteres) == (4, "concatenation", 2000)

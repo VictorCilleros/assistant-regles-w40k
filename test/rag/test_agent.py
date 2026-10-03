@@ -14,6 +14,7 @@ from assistant_regles.rag.agent import (
     definir_outils,
 )
 from assistant_regles.rag.config import ParamsAgent
+from assistant_regles.rag.conversation import TourConversation
 from assistant_regles.rag.generation import PromptSysteme
 from assistant_regles.rag.recherche import Resultat
 
@@ -83,7 +84,10 @@ def _agent(client, source=None, **params):
 def test_prompt_du_repo_sans_marqueur_restant():
     prompt = charger_prompt_agent(ParamsAgent(max_passages=7, max_tours=5))
     assert "{" not in prompt.texte
-    assert "au maximum 7" in prompt.texte and "au plus 4 tours" in prompt.texte
+    assert "Au maximum 7 passages" in prompt.texte and "au plus 4 tours" in prompt.texte
+    for balise in ("<historique_conversation>", "<recherche_initiale>", "<question_joueur>", "<passage>",
+                   "<deja_fournis>", "<aucun_passage />", "<rappel_budget>"):
+        assert balise in prompt.texte, f"balise non décrite dans le prompt : {balise}"
 
 
 def test_outils():
@@ -134,9 +138,10 @@ def test_recherche_complete():
 
     resultats_outils = client.envois[1]["messages"][2]["content"]
     recherche, lecture, erreur = resultats_outils
-    assert recherche["content"][0]["text"].startswith("[P3] 03.04")
-    assert "renvois : 05.03" in recherche["content"][0]["text"]
-    assert recherche["content"][-1]["text"] == "Déjà fournis plus haut : P1."
+    (bloc,) = recherche["content"]
+    assert bloc["text"].startswith('<passage etiquette="P3" code="03.04" pages="10"')
+    assert 'renvois="05.03"' in bloc["text"]
+    assert bloc["text"].endswith("<deja_fournis>P1</deja_fournis>")
     assert erreur["is_error"] is True
 
 
@@ -222,7 +227,8 @@ def test_sans_amorce():
     source = FausseSource()
     _agent(client, source, amorce=False).chercher("Ma question ?")
     assert source.recherches == []
-    assert client.envois[0]["messages"][0]["content"] == [{"type": "text", "text": "Question du joueur : Ma question ?"}]
+    assert client.envois[0]["messages"][0]["content"] == [
+        {"type": "text", "text": "<question_joueur>Ma question ?</question_joueur>"}]
 
 
 def test_k_par_defaut_et_demande():
@@ -240,3 +246,84 @@ def test_question_vide_refusee():
     with pytest.raises(ValueError, match="vide"):
         _agent(client).chercher("   ")
     assert client.envois == []
+
+
+
+# --------------------------------------------------------------------------- #
+# Historique
+# --------------------------------------------------------------------------- #
+PRECEDENT = (TourConversation("Les pistolets tirent-ils au corps à corps ?", "Oui, " + "x" * 3000, ("24.27",)),)
+
+
+def _selection_vide():
+    return FauxClient(_message(_outil("retenir_passages", {"etiquettes": [], "justification": "."})))
+
+
+def test_premiere_question_amorce_avec_la_question_brute():
+    source = FausseSource()
+    _agent(_selection_vide(), source).chercher("Q ?", historique=())
+    assert source.recherches[0][0] == "Q ?"
+
+
+def test_question_de_suite_amorce_par_concatenation():
+    client, source = _selection_vide(), FausseSource()
+    etapes = []
+    _agent(client, source).chercher("Et au corps à corps ?", au_fil=etapes.append, historique=PRECEDENT)
+    assert source.recherches[0][0] == "Les pistolets tirent-ils au corps à corps ? Et au corps à corps ?"
+    assert etapes[0].outil == "amorce" and etapes[0].argument.startswith("Les pistolets")
+
+    historique, amorce, question = (b["text"] for b in client.envois[0]["messages"][0]["content"])
+    assert historique.startswith("<historique_conversation>")
+    assert "<regles_citees>24.27</regles_citees>" in historique
+    assert len(historique) < 3000                                # réponse précédente tronquée
+    assert amorce.startswith('<recherche_initiale requete="Les pistolets')
+    assert amorce.endswith("</recherche_initiale>")
+    assert question == "<question_joueur>Et au corps à corps ?</question_joueur>"
+
+
+def test_question_de_suite_sans_amorce():
+    client, source = _selection_vide(), FausseSource()
+    _agent(client, source, amorce_suivi="aucune").chercher("Et au corps à corps ?", historique=PRECEDENT)
+    assert source.recherches == []
+    textes = [b["text"] for b in client.envois[0]["messages"][0]["content"]]
+    assert len(textes) == 2   # pas de recherche initiale
+    assert textes[0].startswith("<historique_conversation>") and textes[1].startswith("<question_joueur>")
+
+
+def test_amorce_desactivee_reste_desactivee_avec_historique():
+    source = FausseSource()
+    _agent(_selection_vide(), source, amorce=False).chercher("Et au corps à corps ?", historique=PRECEDENT)
+    assert source.recherches == []
+
+
+
+# --------------------------------------------------------------------------- #
+# Balisage
+# --------------------------------------------------------------------------- #
+def test_passage_balise_et_echappe():
+    from assistant_regles.rag.agent import baliser_passage
+
+    r = _resultat("06.01", ["06.02"])
+    r = r.__class__(**{**r.__dict__, "sous_section": 'TIR À 6" "SPÉCIAL"'})
+    texte = baliser_passage("P7", r)
+    assert texte.startswith('<passage etiquette="P7" code="06.01" pages="10" titre="06.01 TIR À 6&quot;')
+    assert 'renvois="06.02">' in texte and texte.endswith("</passage>")
+
+
+def test_question_et_requete_echappees():
+    client = _selection_vide()
+    _agent(client, FausseSource()).chercher('Un "6" <tir> & charge ?')
+    amorce, question = (b["text"] for b in client.envois[0]["messages"][0]["content"])
+    assert amorce.startswith('<recherche_initiale requete="Un &quot;6&quot; &lt;tir&gt; &amp; charge ?">')
+    assert question == '<question_joueur>Un "6" &lt;tir&gt; &amp; charge ?</question_joueur>'
+
+
+def test_recherche_sans_resultat():
+    class SourceVide(FausseSource):
+        def rechercher(self, question, k):
+            return []
+
+    client = _selection_vide()
+    _agent(client, SourceVide()).chercher("Q ?")
+    amorce = client.envois[0]["messages"][0]["content"][0]["text"]
+    assert "<aucun_passage />" in amorce

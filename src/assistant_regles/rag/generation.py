@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import logging
 import time
 from collections.abc import Iterator, Sequence
@@ -36,11 +37,16 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from assistant_regles.rag.config import ParamsGeneration
+    from assistant_regles.rag.conversation import TourConversation
     from assistant_regles.rag.recherche import Resultat
 
 logger = logging.getLogger(__name__)
 
 DOSSIER_PROMPTS = "prompts"
+NOTE_HISTORIQUE = (
+    "Les échanges précédents servent seulement à comprendre la question. "
+    "Les sources sont uniquement les extraits ci-dessous : ne cite et n'affirme rien d'autre."
+)
 CARACTERES_AVANT_ABSTENTION = " \t\n«\"'"  # ignorés avant la phrase d'abstention
 
 
@@ -130,13 +136,34 @@ def vers_search_result(r: Resultat, granularite: str) -> dict[str, Any]:
     }
 
 
-def construire_message(question: str, resultats: Sequence[Resultat], granularite: str) -> dict[str, Any]:
-    """Message utilisateur : les extraits d'abord, la question ensuite."""
+def construire_message(
+    question: str, resultats: Sequence[Resultat], granularite: str, avec_historique: bool = False
+) -> dict[str, Any]:
+    """Message utilisateur : les extraits d'abord, la question ensuite, dans ``<question_joueur>``.
+
+    Avec un historique, une note rappelle en tête que seuls ces extraits sont des
+    sources (les blocs texte ne comptent pas dans la numérotation des citations).
+    La question est échappée : elle ne peut pas fermer la balise par erreur.
+    """
+    note = [{"type": "text", "text": NOTE_HISTORIQUE}] if avec_historique else []
+    balisee = f"<question_joueur>{html.escape(question, quote=False)}</question_joueur>"
     return {
         "role": "user",
-        "content": [vers_search_result(r, granularite) for r in resultats]
-        + [{"type": "text", "text": question}],
+        "content": note
+        + [vers_search_result(r, granularite) for r in resultats]
+        + [{"type": "text", "text": balisee}],
     }
+
+
+def messages_historique(tours: Sequence[TourConversation], max_caracteres: int) -> list[dict[str, Any]]:
+    """Tours précédents en messages alternés (question, puis réponse en texte seul, sans citations)."""
+    from assistant_regles.rag.conversation import tronquer
+
+    messages: list[dict[str, Any]] = []
+    for tour in tours:
+        messages.append({"role": "user", "content": tour.question})
+        messages.append({"role": "assistant", "content": tronquer(tour.reponse, max_caracteres)})
+    return messages
 
 
 # --------------------------------------------------------------------------- #
@@ -297,24 +324,36 @@ class FluxReponse:
 class Generateur:
     """Génère une réponse citée à partir d'une question et des chunks retrouvés."""
 
-    def __init__(self, client: Any, params: ParamsGeneration, prompt: PromptSysteme) -> None:
+    def __init__(
+        self, client: Any, params: ParamsGeneration, prompt: PromptSysteme, max_caracteres_historique: int = 2000
+    ) -> None:
         """
         Args:
             client: client Anthropic (ou tout objet exposant ``messages.create``).
             params: section ``generation`` de la config.
             prompt: prompt système chargé par :func:`charger_prompt`.
+            max_caracteres_historique: longueur maximale d'une réponse précédente transmise.
         """
         self._client = client
         self._params = params
         self._prompt = prompt
+        self._max_caracteres_historique = max_caracteres_historique
 
-    def parametres_requete(self, question: str, resultats: Sequence[Resultat]) -> dict[str, Any]:
-        """Paramètres de l'appel ``messages.create`` (sans temperature : refusée par Sonnet 5)."""
+    def parametres_requete(
+        self, question: str, resultats: Sequence[Resultat], historique: Sequence[TourConversation] = ()
+    ) -> dict[str, Any]:
+        """Paramètres de l'appel ``messages.create`` (sans temperature : refusée par Sonnet 5).
+
+        L'historique devient une suite de messages avant la question courante ;
+        seuls les passages du tour courant sont transmis comme sources.
+        """
+        messages = messages_historique(historique, self._max_caracteres_historique)
+        messages.append(construire_message(question, resultats, self._params.granularite, bool(historique)))
         parametres = {
             "model": self._params.modele,
             "max_tokens": self._params.max_tokens,
             "system": self._prompt.texte,
-            "messages": [construire_message(question, resultats, self._params.granularite)],
+            "messages": messages,
             "output_config": {"effort": self._params.effort},
         }
         if not self._params.reflexion:
@@ -348,7 +387,9 @@ class Generateur:
             duree=0.0,
         )
 
-    def generer_en_flux(self, question: str, resultats: Sequence[Resultat]) -> FluxReponse:
+    def generer_en_flux(
+        self, question: str, resultats: Sequence[Resultat], historique: Sequence[TourConversation] = ()
+    ) -> FluxReponse:
         """Prépare une réponse en streaming (l'appel part à la première itération).
 
         Raises:
@@ -356,11 +397,13 @@ class Generateur:
         """
         self._valider(question, resultats)
         return FluxReponse(
-            self._client, self.parametres_requete(question, resultats),
+            self._client, self.parametres_requete(question, resultats, historique),
             question, resultats, self._params, self._prompt,
         )
 
-    def generer(self, question: str, resultats: Sequence[Resultat]) -> Reponse:
+    def generer(
+        self, question: str, resultats: Sequence[Resultat], historique: Sequence[TourConversation] = ()
+    ) -> Reponse:
         """Appelle Claude et renvoie la réponse structurée.
 
         Raises:
@@ -368,7 +411,7 @@ class Generateur:
         """
         self._valider(question, resultats)
         debut = time.perf_counter()
-        message = self._client.messages.create(**self.parametres_requete(question, resultats))
+        message = self._client.messages.create(**self.parametres_requete(question, resultats, historique))
         duree = time.perf_counter() - debut
         reponse = lire_reponse(message, question, resultats, self._params, self._prompt, duree)
         logger.info(
@@ -413,7 +456,7 @@ def formater_reponse(reponse: Reponse, largeur_extrait: int = 160) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     """Point d'entrée de ``uv run repondre-regles`` : recherche (agent ou top-k) puis génération.
 
-    ``--agent`` / ``--sans-agent`` remplacent le réglage ``agent.actif`` de la config.
+    ``--agent`` / ``--no-agent`` remplacent le réglage ``agent.actif`` de la config.
 
     Returns:
         Code de sortie : 0 si une réponse a été produite, 1 sinon.
@@ -474,7 +517,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             verifier_base(conn, identifiant_modele(config.embeddings))
             moteur = MoteurRecherche(EncodeurBGEM3.charger(config.embeddings), conn)
-            generateur = Generateur(client, config.generation, prompt)
+            generateur = Generateur(client, config.generation, prompt, config.agent.historique_max_caracteres)
             print(f"Question : {args.question}\n")
             if avec_agent:
                 from assistant_regles.rag.agent import AgentRecherche, decrire_appel

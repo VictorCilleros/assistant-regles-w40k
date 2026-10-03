@@ -77,6 +77,9 @@ class TextesChat(_Strict):
     )
     recherche_agent: str = "L'agent cherche dans le livre de règles…"
     recherche_terminee: str = "Recherche terminée : {passages} passage(s) retenu(s) en {tours} tour(s)"
+    aide_nouvelle_conversation: str = (
+        "Efface la conversation : la question suivante repart sans tenir compte des échanges précédents."
+    )
 
     @field_validator("recherche_terminee")
     @classmethod

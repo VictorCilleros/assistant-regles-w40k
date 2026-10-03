@@ -1,7 +1,10 @@
 """Page « Assistant » : le chat.
 
-Chaque question est traitée indépendamment (baseline) : l'historique est
-seulement affiché, il n'est pas transmis au modèle.
+Historique : les derniers échanges réussis (``agent.historique_tours``) sont
+transmis à l'agent et au générateur, pour comprendre les questions de suite
+(« et au corps à corps ? »). Les passages des tours précédents ne sont pas
+retransmis : seuls ceux du tour courant servent de sources. Le bouton
+« Nouvelle conversation » efface l'historique, et donc ce contexte.
 
 Déroulé d'une question :
 
@@ -24,6 +27,7 @@ import streamlit as st
 
 from assistant_regles.rag.agent import decrire_appel
 from assistant_regles.rag.config import charger_config as charger_config_rag
+from assistant_regles.rag.conversation import TourConversation, depuis_reponse, fenetre
 from assistant_regles.ui import ressources
 from assistant_regles.ui.rendu import (
     legende_agent,
@@ -43,6 +47,12 @@ logger = logging.getLogger(__name__)
 
 def _vider_historique() -> None:
     st.session_state.historique = []
+
+
+def tours_precedents(historique: list[dict[str, Any]]) -> list[TourConversation]:
+    """Échanges réussis de l'historique affiché (les erreurs sont ignorées)."""
+    return [depuis_reponse(e["contenu"]["reponse"]) for e in historique
+            if e["role"] == "assistant" and isinstance(e["contenu"], dict)]
 
 
 def _titre_recherche(selection: Selection, textes: Textes) -> str:
@@ -72,29 +82,36 @@ def _afficher_erreur(textes: Textes, detail: str) -> None:
         st.code(detail, language=None)
 
 
-def _chercher(question: str, mode_agent: bool, config_rag: Any, textes: Textes):
-    """Étape 1 : renvoie (passages, sélection de l'agent ou None)."""
+def _chercher(question: str, mode_agent: bool, config_rag: Any, textes: Textes,
+              tours: list[TourConversation]):
+    """Étape 1 : renvoie (passages, sélection de l'agent ou None).
+
+    L'historique n'est utilisé qu'en mode agent : sans agent, la recherche top-k
+    porte sur la question brute (une question de suite y donne de mauvais résultats).
+    """
     if not mode_agent:
         with st.spinner(textes.chat.recherche_en_cours):
             return ressources.moteur_recherche().rechercher(question, config_rag.recherche.k), None
     with st.status(textes.chat.recherche_agent, expanded=True) as statut:
         selection = ressources.agent(config_rag).chercher(
-            question, au_fil=lambda appel: statut.markdown(f"- {decrire_appel(appel)}")
+            question, au_fil=lambda appel: statut.markdown(f"- {decrire_appel(appel)}"), historique=tours
         )
         statut.update(label=_titre_recherche(selection, textes), state="complete", expanded=False)
     return list(selection.passages), selection
 
 
-def _repondre(question: str, mode_agent: bool, textes: Textes) -> dict[str, Any] | str:
+def _repondre(question: str, mode_agent: bool, textes: Textes,
+              precedents: list[TourConversation]) -> dict[str, Any] | str:
     """Recherche puis génération ; renvoie {reponse, selection} ou le détail de l'erreur."""
     import psycopg
 
     config_rag = charger_config_rag()
+    tours = fenetre(precedents, config_rag.agent.historique_tours)
     try:
-        passages, selection = _chercher(question, mode_agent, config_rag, textes)
+        passages, selection = _chercher(question, mode_agent, config_rag, textes, tours)
         generateur = ressources.generateur(config_rag)
         if passages:
-            flux = generateur.generer_en_flux(question, passages)
+            flux = generateur.generer_en_flux(question, passages, historique=tours)
             zone = st.empty()
             with zone.container():
                 st.write_stream(flux)  # texte au fil de l'eau, sans les notes
@@ -124,7 +141,8 @@ def afficher(config: ConfigUi) -> None:
         mode_agent = st.toggle(textes.chat.mode_agent, value=charger_config_rag().agent.actif,
                                key="mode_agent", help=textes.chat.aide_mode_agent)
         st.button(textes.chat.nouvelle_conversation, icon=":material/add_comment:",
-                  on_click=_vider_historique, use_container_width=True)
+                  on_click=_vider_historique, use_container_width=True,
+                  help=textes.chat.aide_nouvelle_conversation)
 
     historique = st.session_state.setdefault("historique", [])
     if not historique:
@@ -147,8 +165,10 @@ def afficher(config: ConfigUi) -> None:
             _afficher_details(reponse, selection, textes)
 
     if question := st.chat_input(textes.chat.placeholder):
+        precedents = tours_precedents(historique)  # avant d'ajouter la question courante
         historique.append({"role": "utilisateur", "contenu": question})
         with st.chat_message("user", avatar=apparence.avatar_utilisateur):
             st.markdown(markdown_question(question), unsafe_allow_html=True)
         with st.chat_message("assistant", avatar=apparence.avatar_assistant):
-            historique.append({"role": "assistant", "contenu": _repondre(question, mode_agent, textes)})
+            historique.append({"role": "assistant",
+                               "contenu": _repondre(question, mode_agent, textes, precedents)})

@@ -83,6 +83,9 @@ def tableau_configuration(
         ("Budget de l'agent", f"{a.max_tours} tours, {a.min_passages} à {a.max_passages} passages transmis, "
                               f"{a.k} passages par recherche, amorce {'activée' if a.amorce else 'désactivée'}"),
         ("Prompt de l'agent", f"{a.prompt} [{prompt_agent.empreinte[:8]}]" if prompt_agent else a.prompt),
+        ("Historique de conversation",
+         f"{a.historique_tours} derniers échanges, amorce des questions de suite : {a.amorce_suivi}"
+         if a.historique_tours else "désactivé (questions indépendantes)"),
     ]
     return [
         ("Modèle d'embedding", f"{e.modele} (révision {e.revision[:8]}, dimension {e.dimension})"),

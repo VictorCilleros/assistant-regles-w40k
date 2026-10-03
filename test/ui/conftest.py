@@ -52,7 +52,12 @@ class FauxFlux:
 
 class FauxClient:
     def __init__(self):
-        self.messages = NS(stream=lambda **kw: FauxFlux(faux_message()), create=lambda **kw: faux_message())
+        self.appels = []
+        self.messages = NS(stream=self._stream, create=lambda **kw: faux_message())
+
+    def _stream(self, **kwargs):
+        self.appels.append(kwargs)
+        return FauxFlux(faux_message())
 
 
 class FauxMoteur:
@@ -66,9 +71,11 @@ class FauxAgent:
     def __init__(self, passages):
         self.passages = passages
         self.questions = []
+        self.historiques = []
 
-    def chercher(self, question, au_fil=None):
+    def chercher(self, question, au_fil=None, historique=()):
         self.questions.append(question)
+        self.historiques.append(list(historique))
         etapes = (AppelOutil("amorce", question, ("24.20",)),
                   AppelOutil("rechercher_regles", "PISTOLET CORPS À CORPS", ("24.20", "24.21")),
                   AppelOutil("retenir_passages", "P1", tuple(r.code for r in self.passages)))
@@ -97,10 +104,12 @@ def ressources_factices(monkeypatch):
     from assistant_regles.ui import ressources
 
     prompt = PromptSysteme("systeme_test.md", f"… {PHRASE}", "b" * 64)
+    client = FauxClient()
     monkeypatch.setattr(ressources, "moteur_recherche", lambda: FauxMoteur())
     monkeypatch.setattr(ressources, "generateur",
-                        lambda config_rag: Generateur(FauxClient(), config_rag.generation, prompt))
+                        lambda config_rag: Generateur(client, config_rag.generation, prompt))
     monkeypatch.setattr(ressources, "compter_chunks", lambda: {("livre_regles_principal", "11e"): 207})
     agent = FauxAgent([fabriquer_resultat(0)])
+    agent.client = client   # pour inspecter les appels au générateur
     monkeypatch.setattr(ressources, "agent", lambda config_rag: agent)
     return agent
